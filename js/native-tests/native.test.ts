@@ -1,20 +1,18 @@
 import { expect, test } from "bun:test"
-import { createRequire } from "node:module"
-
-const require = createRequire(import.meta.url)
-const native = require("../native/matrix_bot_node.node")
+import { MatrixBot, SubBot } from "../src/index"
 
 test("native binding registers sub-bots", () => {
-  const bot = new native.MatrixBot({
+  const bot = new MatrixBot({
     homeserverUrl: "https://matrix.example.org",
     username: "@bot:example.org",
     password: "secret",
     recoveryKey: "recovery",
   })
-  const subBot = new native.SubBot("factcheck")
+  const subBot = new SubBot("factcheck")
 
-  bot.registerSubBot(subBot)
+  bot.use(subBot)
 
+  expect(bot.nativeAvailable).toBe(true)
   expect(subBot.name).toBe("factcheck")
   expect(bot.subBotCount).toBe(1)
 })

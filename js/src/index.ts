@@ -1,3 +1,5 @@
+import { loadNativeBinding } from "./native"
+
 export type MatrixBotOptions = {
   homeserverUrl: string
   username: string
@@ -44,6 +46,7 @@ export type RouteLayer = {
 export class MatrixBot {
   readonly options: MatrixBotOptions
   readonly subBots: SubBot[] = []
+  private readonly native
 
   constructor(options: MatrixBotOptions) {
     assertPresent("homeserverUrl", options.homeserverUrl)
@@ -51,6 +54,9 @@ export class MatrixBot {
     assertPresent("password", options.password)
     assertPresent("recoveryKey", options.recoveryKey)
     this.options = { ...options }
+    this.native = nativeBinding
+      ? new nativeBinding.MatrixBot(toNativeOptions(this.options))
+      : undefined
   }
 
   use(subBot: SubBot): this {
@@ -59,7 +65,18 @@ export class MatrixBot {
     }
 
     this.subBots.push(subBot)
+    if (this.native && subBot.native) {
+      this.native.registerSubBot(subBot.native)
+    }
     return this
+  }
+
+  get nativeAvailable(): boolean {
+    return this.native !== undefined
+  }
+
+  get subBotCount(): number {
+    return this.native?.subBotCount ?? this.subBots.length
   }
 
   async listen(options: ListenOptions): Promise<never> {
@@ -74,10 +91,12 @@ export class MatrixBot {
 export class SubBot {
   readonly name: string
   readonly routes: RouteLayer[] = []
+  readonly native
 
   constructor(name: string) {
     assertPresent("name", name)
     this.name = name
+    this.native = nativeBinding ? new nativeBinding.SubBot(this.name) : undefined
   }
 
   use(matcher: RouteMatcher, ...pipeline: [...Middleware[], Handler]): this {
@@ -97,3 +116,9 @@ function assertPresent(field: string, value: string): void {
     throw new Error(`${field} is required`)
   }
 }
+
+function toNativeOptions(options: MatrixBotOptions): MatrixBotOptions {
+  return { ...options }
+}
+
+const nativeBinding = loadNativeBinding()
