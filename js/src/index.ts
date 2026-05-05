@@ -88,7 +88,7 @@ export class MatrixBot {
     return handled
   }
 
-  async listen(options: ListenOptions): Promise<never> {
+  async listen(options: ListenOptions): Promise<void> {
     if (!options.owners.some((owner) => owner.trim().length > 0)) {
       throw new Error("owners is required")
     }
@@ -111,7 +111,7 @@ export class MatrixBot {
       },
     )
 
-    await new Promise<never>(() => {})
+    await new Promise<void>(() => {})
   }
 
   private contextFromNative(message: NativeIncomingMessage): MatrixContext {
