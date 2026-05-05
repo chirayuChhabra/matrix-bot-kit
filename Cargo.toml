@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/matrix-bot-core"]
+members = ["crates/matrix-bot-core", "crates/matrix-bot-runtime"]
 resolver = "3"
 
 [workspace.package]
