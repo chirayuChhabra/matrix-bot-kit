@@ -18,6 +18,12 @@
       ],
       "test-js": [
         "bun test js/tests"
+      ],
+      "build-native": [
+        "bash scripts/build-native.sh"
+      ],
+      "test-native": [
+        "bun test js/native-tests"
       ]
     }
   }

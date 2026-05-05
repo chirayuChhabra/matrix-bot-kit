@@ -10,6 +10,15 @@ This repository is intentionally being built in small commits. The first module 
 
 The next layer will expose this core to Bun/TypeScript through a native binding.
 
+Build checks:
+
+```sh
+devbox run test
+devbox run test-js
+devbox run build-native
+devbox run test-native
+```
+
 Target TypeScript API:
 
 ```ts

@@ -11,3 +11,6 @@ crate-type = ["cdylib"]
 matrix-bot-core = { path = "../matrix-bot-core" }
 napi = { version = "3.8", default-features = false, features = ["napi8"] }
 napi-derive = "3.5"
+
+[build-dependencies]
+napi-build = "2.3"
