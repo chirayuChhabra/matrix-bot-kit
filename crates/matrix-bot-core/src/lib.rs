@@ -8,7 +8,7 @@ mod sub_bot;
 
 pub use bot::{ListenOptions, MatrixBot};
 pub use config::MatrixBotConfig;
-pub use context::{IncomingMessage, MatrixContext, RepliedMessage};
+pub use context::{IncomingMessage, MatrixContext, RepliedMessage, ReplyTarget};
 pub use dispatch::{DispatchPlan, DispatchRoute, DispatchStep};
 pub use error::{MatrixBotError, Result};
 pub use route::{HandlerBinding, RouteLayer, RouteMatcher};

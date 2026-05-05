@@ -4,7 +4,7 @@ pub struct IncomingMessage {
     pub room_id: String,
     pub sender: String,
     pub body: String,
-    pub replied_message: Option<RepliedMessage>,
+    pub reply_target: ReplyTarget,
 }
 
 impl IncomingMessage {
@@ -19,12 +19,19 @@ impl IncomingMessage {
             room_id: room_id.into(),
             sender: sender.into(),
             body: body.into(),
-            replied_message: None,
+            reply_target: ReplyTarget::NoReply,
         }
     }
 
     pub fn with_replied_message(mut self, replied_message: RepliedMessage) -> Self {
-        self.replied_message = Some(replied_message);
+        self.reply_target = ReplyTarget::Text(replied_message);
+        self
+    }
+
+    pub fn with_unsupported_reply(mut self, event_id: impl Into<String>) -> Self {
+        self.reply_target = ReplyTarget::Unsupported {
+            event_id: event_id.into(),
+        };
         self
     }
 }
@@ -34,6 +41,13 @@ pub struct RepliedMessage {
     pub event_id: String,
     pub sender: String,
     pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReplyTarget {
+    Text(RepliedMessage),
+    Unsupported { event_id: String },
+    NoReply,
 }
 
 impl RepliedMessage {
@@ -69,9 +83,16 @@ impl MatrixContext {
     }
 
     pub fn is_reply_to_bot(&self) -> bool {
-        self.message
-            .replied_message
-            .as_ref()
-            .is_some_and(|message| message.sender == self.bot_user_id)
+        matches!(
+            &self.message.reply_target,
+            ReplyTarget::Text(message) if message.sender == self.bot_user_id
+        )
+    }
+
+    pub fn replied_message(&self) -> Option<&RepliedMessage> {
+        match &self.message.reply_target {
+            ReplyTarget::Text(message) => Some(message),
+            ReplyTarget::Unsupported { .. } | ReplyTarget::NoReply => None,
+        }
     }
 }
