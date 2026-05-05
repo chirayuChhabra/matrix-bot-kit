@@ -6,7 +6,7 @@ use matrix_sdk::{
 use tokio::fs;
 use url::Url;
 
-use crate::{MatrixRuntimeError, RuntimeResult};
+use crate::{MatrixRuntimeError, RuntimeResult, SyncLoopOptions, sync::sync_settings};
 
 #[derive(Debug, Clone)]
 pub struct MatrixRuntime {
@@ -45,6 +45,15 @@ impl MatrixRuntime {
             .device_id()
             .map(ToString::to_string)
             .ok_or(MatrixRuntimeError::MissingSessionField("device_id"))
+    }
+
+    pub async fn sync_once(
+        &self,
+        token: Option<String>,
+        options: &SyncLoopOptions,
+    ) -> RuntimeResult<String> {
+        let response = self.client.sync_once(sync_settings(token, options)).await?;
+        Ok(response.next_batch)
     }
 }
 

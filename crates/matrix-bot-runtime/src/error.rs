@@ -8,6 +8,7 @@ pub enum MatrixRuntimeError {
     Crypto(String),
     Io(std::io::Error),
     Json(serde_json::Error),
+    InvalidSyncOption(&'static str),
     MissingSessionField(&'static str),
 }
 
@@ -20,6 +21,7 @@ impl std::fmt::Display for MatrixRuntimeError {
             Self::Crypto(error) => write!(formatter, "Matrix crypto error: {error}"),
             Self::Io(error) => write!(formatter, "I/O error: {error}"),
             Self::Json(error) => write!(formatter, "JSON error: {error}"),
+            Self::InvalidSyncOption(message) => write!(formatter, "invalid sync option: {message}"),
             Self::MissingSessionField(field) => {
                 write!(formatter, "Matrix session missing {field} after login")
             }
