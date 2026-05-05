@@ -39,3 +39,42 @@ test("rejects duplicate sub-bot names", () => {
     "a sub-bot named `factcheck` is already registered",
   )
 })
+
+test("dispatches middleware before handler", async () => {
+  const bot = new MatrixBot(options)
+  const subBot = new SubBot("factcheck")
+  const calls: string[] = []
+  const ctx = testContext("!check this claim")
+
+  subBot.use(
+    "!check",
+    async (_ctx, next) => {
+      calls.push("middleware:before")
+      await next()
+      calls.push("middleware:after")
+    },
+    async () => {
+      calls.push("handler")
+    },
+  )
+  bot.use(subBot)
+
+  const handled = await bot.dispatch(ctx)
+
+  expect(handled).toBe(1)
+  expect(calls).toEqual(["middleware:before", "handler", "middleware:after"])
+})
+
+function testContext(body: string) {
+  return {
+    eventId: "$event",
+    roomId: "!room:example.org",
+    sender: "@user:example.org",
+    body,
+    replyUnsupported: false,
+    async sendText() {},
+    async sendMarkdown() {},
+    async replyText() {},
+    async replyMarkdown() {},
+  }
+}

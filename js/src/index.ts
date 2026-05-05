@@ -79,6 +79,14 @@ export class MatrixBot {
     return this.native?.subBotCount ?? this.subBots.length
   }
 
+  async dispatch(ctx: MatrixContext): Promise<number> {
+    let handled = 0
+    for (const subBot of this.subBots) {
+      handled += await subBot.dispatch(ctx)
+    }
+    return handled
+  }
+
   async listen(options: ListenOptions): Promise<never> {
     if (!options.owners.some((owner) => owner.trim().length > 0)) {
       throw new Error("owners is required")
@@ -109,6 +117,19 @@ export class SubBot {
     this.routes.push({ matcher, middleware, handler })
     return this
   }
+
+  async dispatch(ctx: MatrixContext): Promise<number> {
+    let handled = 0
+    for (const route of this.routes) {
+      if (!matches(route.matcher, ctx)) {
+        continue
+      }
+
+      handled += 1
+      await runPipeline(ctx, route.middleware, route.handler)
+    }
+    return handled
+  }
 }
 
 function assertPresent(field: string, value: string): void {
@@ -119,6 +140,43 @@ function assertPresent(field: string, value: string): void {
 
 function toNativeOptions(options: MatrixBotOptions): MatrixBotOptions {
   return { ...options }
+}
+
+function matches(matcher: RouteMatcher, ctx: MatrixContext): boolean {
+  if (typeof matcher === "string") {
+    return ctx.body.trim().startsWith(matcher)
+  }
+
+  if (matcher instanceof RegExp) {
+    return matcher.test(ctx.body)
+  }
+
+  return matcher(ctx)
+}
+
+async function runPipeline(
+  ctx: MatrixContext,
+  middleware: Middleware[],
+  handler: Handler,
+): Promise<void> {
+  let index = -1
+
+  async function dispatch(position: number): Promise<void> {
+    if (position <= index) {
+      throw new Error("next() called multiple times")
+    }
+    index = position
+
+    const layer = middleware[position]
+    if (!layer) {
+      await handler(ctx)
+      return
+    }
+
+    await layer(ctx, () => dispatch(position + 1))
+  }
+
+  await dispatch(0)
 }
 
 const nativeBinding = loadNativeBinding()
