@@ -43,3 +43,18 @@ await bot.listen({
   controlPassword: Bun.env.CONTROL_PASSWORD,
 })
 ```
+
+Run the local example:
+
+```sh
+export HOMESERVER_URL="https://matrix.example.org"
+export BOT_USERNAME="@bot:example.org"
+export BOT_PASSWORD="..."
+export RECOVERY_KEY="..."
+export BOT_OWNERS="@you:example.org"
+
+devbox run build-native
+devbox run bun examples/ping-bot.ts
+```
+
+The bot accepts invites from `BOT_OWNERS`, listens with a bounded Matrix timeline backlog, and replies to `!ping` with `pong`.

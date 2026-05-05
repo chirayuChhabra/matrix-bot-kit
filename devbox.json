@@ -24,6 +24,9 @@
       ],
       "test-native": [
         "bun test js/native-tests"
+      ],
+      "example": [
+        "bun examples/ping-bot.ts"
       ]
     }
   }
