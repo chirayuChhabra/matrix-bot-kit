@@ -15,6 +15,9 @@
       ],
       "test": [
         "cargo test --workspace"
+      ],
+      "test-js": [
+        "bun test js/tests"
       ]
     }
   }

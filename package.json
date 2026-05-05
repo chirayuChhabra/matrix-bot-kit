@@ -1,0 +1,11 @@
+{
+  "name": "matrix-bot-sdk-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "js"
+  ],
+  "scripts": {
+    "test": "bun test js/tests"
+  }
+}
