@@ -1,4 +1,4 @@
-import { loadNativeBinding } from "./native"
+import { loadNativeBinding, type NativeIncomingMessage } from "./native"
 
 export type MatrixBotOptions = {
   homeserverUrl: string
@@ -11,6 +11,7 @@ export type MatrixBotOptions = {
 export type ListenOptions = {
   owners: string[]
   controlPassword?: string
+  timelineLimit?: number
 }
 
 export type MatrixContext = {
@@ -92,7 +93,42 @@ export class MatrixBot {
       throw new Error("owners is required")
     }
 
-    throw new Error("native Matrix runtime binding is not wired yet")
+    if (!this.native) {
+      throw new Error(
+        "native Matrix runtime binding is missing; run `devbox run build-native` first",
+      )
+    }
+
+    this.native.start(
+      {
+        owners: options.owners,
+        timelineLimit: options.timelineLimit,
+      },
+      (message) => {
+        this.dispatch(this.contextFromNative(message)).catch((error) => {
+          console.error("Matrix bot handler failed", error)
+        })
+      },
+    )
+
+    await new Promise<never>(() => {})
+  }
+
+  private contextFromNative(message: NativeIncomingMessage): MatrixContext {
+    return {
+      eventId: message.eventId,
+      roomId: message.roomId,
+      sender: message.sender,
+      body: message.body,
+      repliedMessage: message.repliedMessage,
+      replyUnsupported: message.replyUnsupported,
+      sendText: (body) => this.native!.sendText(message.roomId, body),
+      sendMarkdown: (body) => this.native!.sendMarkdown(message.roomId, body),
+      replyText: (body) =>
+        this.native!.replyText(message.roomId, message.eventId, body),
+      replyMarkdown: (body) =>
+        this.native!.replyMarkdown(message.roomId, message.eventId, body),
+    }
   }
 }
 

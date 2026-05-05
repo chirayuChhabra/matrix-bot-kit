@@ -1681,9 +1681,12 @@ name = "matrix-bot-node"
 version = "0.1.0"
 dependencies = [
  "matrix-bot-core",
+ "matrix-bot-runtime",
+ "matrix-sdk",
  "napi",
  "napi-build",
  "napi-derive",
+ "tokio",
 ]
 
 [[package]]
@@ -1998,6 +2001,7 @@ dependencies = [
  "napi-sys",
  "nohash-hasher",
  "rustc-hash",
+ "tokio",
 ]
 
 [[package]]
