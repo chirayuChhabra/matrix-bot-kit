@@ -6,8 +6,12 @@ mod sync;
 
 pub use client::MatrixRuntime;
 pub use error::{MatrixRuntimeError, RuntimeResult};
-pub use events::incoming_message_from_room_event;
+pub use events::{
+    download_media_from_room_event, incoming_message_from_room_event, incoming_poll_from_event,
+    incoming_unstable_poll_from_event,
+};
 pub use outbound::{
-    send_markdown_notice, send_markdown_reply, send_plain_notice, send_plain_reply,
+    MediaAttachment, MediaAttachmentKind, Poll, PollOption, send_markdown_notice,
+    send_markdown_reply, send_media_attachment, send_plain_notice, send_plain_reply, send_poll,
 };
 pub use sync::SyncLoopOptions;

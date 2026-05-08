@@ -1,4 +1,9 @@
-import { MatrixBot, SubBot } from "../js/src/index"
+import {
+  MatrixBot,
+  SubBot,
+  type MatrixRequest,
+  type MatrixResponse,
+} from "../js/src/index"
 
 const bot = new MatrixBot({
   homeserverUrl: required("HOMESERVER_URL"),
@@ -6,20 +11,22 @@ const bot = new MatrixBot({
   password: required("BOT_PASSWORD"),
   recoveryKey: required("RECOVERY_KEY"),
   dataDir: Bun.env.DATA_DIR ?? ".matrix-bot-sdk",
-})
-
-const ping = new SubBot("ping")
-
-ping.use("!ping", async (ctx) => {
-  await ctx.replyText("pong")
-})
-
-ping.use(
-  (ctx) => ctx.replyUnsupported,
-  async (ctx) => {
-    await ctx.replyText("this feature willcome sson")
+  config: {
+    announceSubBotUsage: true,
+    selfDocumentation: true,
   },
-)
+})
+
+const ping = new SubBot({
+  name: "ping",
+  command: ["!ping", "!p"],
+  description: "Replies with pong.",
+  category: "Utility",
+})
+
+ping.use(async (_req: MatrixRequest, res: MatrixResponse) => {
+  await res.replyText("pong")
+})
 
 bot.use(ping)
 

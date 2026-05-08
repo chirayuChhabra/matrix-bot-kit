@@ -5,19 +5,15 @@ use crate::{DispatchPlan, MatrixBotConfig, MatrixBotError, MatrixContext, Result
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListenOptions {
     pub owners: Vec<String>,
-    pub control_password: Option<String>,
 }
 
 impl ListenOptions {
-    pub fn new(owners: Vec<String>, control_password: Option<String>) -> Result<Self> {
+    pub fn new(owners: Vec<String>) -> Result<Self> {
         if owners.iter().all(|owner| owner.trim().is_empty()) {
             return Err(MatrixBotError::MissingField { field: "owners" });
         }
 
-        Ok(Self {
-            owners,
-            control_password,
-        })
+        Ok(Self { owners })
     }
 }
 

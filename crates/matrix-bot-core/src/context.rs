@@ -3,7 +3,10 @@ pub struct IncomingMessage {
     pub event_id: String,
     pub room_id: String,
     pub sender: String,
+    pub message_type: String,
     pub body: String,
+    pub media: Option<MediaMessage>,
+    pub poll: Option<PollMessage>,
     pub reply_target: ReplyTarget,
 }
 
@@ -18,9 +21,27 @@ impl IncomingMessage {
             event_id: event_id.into(),
             room_id: room_id.into(),
             sender: sender.into(),
+            message_type: "text".to_owned(),
             body: body.into(),
+            media: None,
+            poll: None,
             reply_target: ReplyTarget::NoReply,
         }
+    }
+
+    pub fn with_message_type(mut self, message_type: impl Into<String>) -> Self {
+        self.message_type = message_type.into();
+        self
+    }
+
+    pub fn with_media(mut self, media: MediaMessage) -> Self {
+        self.media = Some(media);
+        self
+    }
+
+    pub fn with_poll(mut self, poll: PollMessage) -> Self {
+        self.poll = Some(poll);
+        self
     }
 
     pub fn with_replied_message(mut self, replied_message: RepliedMessage) -> Self {
@@ -37,10 +58,40 @@ impl IncomingMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaMessage {
+    pub kind: String,
+    pub filename: String,
+    pub caption: Option<String>,
+    pub mxc_uri: Option<String>,
+    pub mimetype: Option<String>,
+    pub size: Option<u64>,
+    pub width: Option<u64>,
+    pub height: Option<u64>,
+    pub duration_ms: Option<u64>,
+    pub encrypted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollMessage {
+    pub question: String,
+    pub kind: String,
+    pub max_selections: u64,
+    pub answers: Vec<PollAnswer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollAnswer {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepliedMessage {
     pub event_id: String,
     pub sender: String,
+    pub message_type: String,
     pub body: String,
+    pub media: Option<MediaMessage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,8 +110,20 @@ impl RepliedMessage {
         Self {
             event_id: event_id.into(),
             sender: sender.into(),
+            message_type: "text".to_owned(),
             body: body.into(),
+            media: None,
         }
+    }
+
+    pub fn with_message_type(mut self, message_type: impl Into<String>) -> Self {
+        self.message_type = message_type.into();
+        self
+    }
+
+    pub fn with_media(mut self, media: MediaMessage) -> Self {
+        self.media = Some(media);
+        self
     }
 }
 

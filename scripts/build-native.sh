@@ -22,4 +22,7 @@ case "$(uname -s)" in
 esac
 
 cp "${source_library}" "${native_dir}/matrix_bot_node.node"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  codesign --force --sign - "${native_dir}/matrix_bot_node.node"
+fi
 echo "Built ${native_dir}/matrix_bot_node.node"

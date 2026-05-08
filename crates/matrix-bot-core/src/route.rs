@@ -3,12 +3,17 @@ use crate::MatrixContext;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RouteMatcher {
     AnyText,
+    Command(String),
     Exact(String),
     Prefix(String),
     ReplyToBot,
 }
 
 impl RouteMatcher {
+    pub fn command(value: impl Into<String>) -> Self {
+        Self::Command(value.into())
+    }
+
     pub fn exact(value: impl Into<String>) -> Self {
         Self::Exact(value.into())
     }
@@ -20,6 +25,10 @@ impl RouteMatcher {
     pub fn matches(&self, ctx: &MatrixContext) -> bool {
         match self {
             Self::AnyText => !ctx.body().is_empty(),
+            Self::Command(value) => {
+                let body = ctx.body();
+                body == value || body.starts_with(&format!("{value} "))
+            }
             Self::Exact(value) => ctx.body() == value,
             Self::Prefix(value) => ctx.body().starts_with(value),
             Self::ReplyToBot => ctx.is_reply_to_bot(),
@@ -84,6 +93,13 @@ mod tests {
     fn prefix_routes_match_command_text() {
         assert!(RouteMatcher::prefix("!check").matches(&ctx("!check moon is cheese")));
         assert!(!RouteMatcher::prefix("!imdb").matches(&ctx("!check moon is cheese")));
+    }
+
+    #[test]
+    fn command_routes_do_not_match_partial_tokens() {
+        assert!(RouteMatcher::command("!w").matches(&ctx("!w now delhi")));
+        assert!(RouteMatcher::command("!w").matches(&ctx("!w")));
+        assert!(!RouteMatcher::command("!w").matches(&ctx("!weather now delhi")));
     }
 
     #[test]

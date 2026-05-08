@@ -1,10 +1,21 @@
-use matrix_bot_core::{IncomingMessage, RepliedMessage};
+use std::time::Duration;
+
+use matrix_bot_core::{IncomingMessage, MediaMessage, PollAnswer, PollMessage, RepliedMessage};
 use matrix_sdk::{
     Room,
+    media::{MediaFormat, MediaRequestParameters},
     ruma::{
         EventId, OwnedEventId,
         events::{
             AnySyncMessageLikeEvent, AnySyncTimelineEvent,
+            poll::{
+                start::{OriginalSyncPollStartEvent, PollStartEventContent},
+                unstable_start::{
+                    OriginalSyncUnstablePollStartEvent, UnstablePollStartContentBlock,
+                    UnstablePollStartEventContent,
+                },
+            },
+            room::MediaSource,
             room::message::{
                 MessageType, OriginalSyncRoomMessageEvent, Relation,
                 RoomMessageEventContentWithoutRelation,
@@ -19,7 +30,7 @@ pub async fn incoming_message_from_room_event(
     event: &OriginalSyncRoomMessageEvent,
     room: &Room,
 ) -> RuntimeResult<Option<IncomingMessage>> {
-    let MessageType::Text(text) = &event.content.msgtype else {
+    let Some((message_type, body, media)) = message_parts(&event.content.msgtype) else {
         return Ok(None);
     };
 
@@ -27,8 +38,13 @@ pub async fn incoming_message_from_room_event(
         event.event_id.to_string(),
         room.room_id().to_string(),
         event.sender.to_string(),
-        text.body.trim().to_owned(),
-    );
+        body,
+    )
+    .with_message_type(message_type);
+
+    if let Some(media) = media {
+        message = message.with_media(media);
+    }
 
     match replied_message(event, room).await? {
         MatrixReplyTarget::Text(replied) => {
@@ -43,10 +59,246 @@ pub async fn incoming_message_from_room_event(
     Ok(Some(message))
 }
 
+pub fn incoming_poll_from_event(
+    event: &OriginalSyncPollStartEvent,
+    room: &Room,
+) -> IncomingMessage {
+    let poll = poll_from_content(&event.content);
+    IncomingMessage::new(
+        event.event_id.to_string(),
+        room.room_id().to_string(),
+        event.sender.to_string(),
+        poll.question.clone(),
+    )
+    .with_message_type("poll")
+    .with_poll(poll)
+}
+
+pub fn incoming_unstable_poll_from_event(
+    event: &OriginalSyncUnstablePollStartEvent,
+    room: &Room,
+) -> Option<IncomingMessage> {
+    let UnstablePollStartEventContent::New(content) = &event.content else {
+        return None;
+    };
+    let poll = unstable_poll_from_content(&content.poll_start);
+    Some(
+        IncomingMessage::new(
+            event.event_id.to_string(),
+            room.room_id().to_string(),
+            event.sender.to_string(),
+            poll.question.clone(),
+        )
+        .with_message_type("poll")
+        .with_poll(poll),
+    )
+}
+
+pub async fn download_media_from_room_event(
+    room: &Room,
+    event_id: OwnedEventId,
+) -> RuntimeResult<Vec<u8>> {
+    let event = room.load_or_fetch_event(&event_id, None).await?;
+    let timeline_event = event
+        .raw()
+        .deserialize()
+        .map_err(|error| MatrixRuntimeError::Event(error.to_string()))?;
+
+    let AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::RoomMessage(message)) =
+        timeline_event
+    else {
+        return Err(MatrixRuntimeError::Event(
+            "event is not a room message".to_owned(),
+        ));
+    };
+
+    let Some(message) = message.as_original() else {
+        return Err(MatrixRuntimeError::Event(
+            "event is not an original room message".to_owned(),
+        ));
+    };
+
+    let Some(source) = media_source(&message.content.msgtype) else {
+        return Err(MatrixRuntimeError::Event(
+            "event has no downloadable media".to_owned(),
+        ));
+    };
+
+    let request = MediaRequestParameters {
+        source,
+        format: MediaFormat::File,
+    };
+
+    Ok(room
+        .client()
+        .media()
+        .get_media_content(&request, true)
+        .await?)
+}
+
 enum MatrixReplyTarget {
     Text(RepliedMessage),
     Unsupported(OwnedEventId),
     NoReply,
+}
+
+fn message_parts(msgtype: &MessageType) -> Option<(String, String, Option<MediaMessage>)> {
+    match msgtype {
+        MessageType::Text(text) => Some(("text".to_owned(), text.body.trim().to_owned(), None)),
+        MessageType::Notice(notice) => {
+            Some(("notice".to_owned(), notice.body.trim().to_owned(), None))
+        }
+        MessageType::ServerNotice(notice) => Some((
+            "server_notice".to_owned(),
+            notice.body.trim().to_owned(),
+            None,
+        )),
+        MessageType::Image(image) => Some((
+            "image".to_owned(),
+            image
+                .caption()
+                .unwrap_or_else(|| image.filename())
+                .trim()
+                .to_owned(),
+            Some(MediaMessage {
+                kind: "image".to_owned(),
+                filename: image.filename().to_owned(),
+                caption: image.caption().map(str::to_owned),
+                mxc_uri: plain_mxc_uri(&image.source),
+                mimetype: image.info.as_ref().and_then(|info| info.mimetype.clone()),
+                size: image
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.size.map(Into::into)),
+                width: image
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.width.map(Into::into)),
+                height: image
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.height.map(Into::into)),
+                duration_ms: None,
+                encrypted: matches!(image.source, MediaSource::Encrypted(_)),
+            }),
+        )),
+        MessageType::File(file) => Some((
+            "file".to_owned(),
+            file.caption()
+                .unwrap_or_else(|| file.filename())
+                .trim()
+                .to_owned(),
+            Some(MediaMessage {
+                kind: "file".to_owned(),
+                filename: file.filename().to_owned(),
+                caption: file.caption().map(str::to_owned),
+                mxc_uri: plain_mxc_uri(&file.source),
+                mimetype: file.info.as_ref().and_then(|info| info.mimetype.clone()),
+                size: file
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.size.map(Into::into)),
+                width: None,
+                height: None,
+                duration_ms: None,
+                encrypted: matches!(file.source, MediaSource::Encrypted(_)),
+            }),
+        )),
+        MessageType::Video(video) => Some((
+            "video".to_owned(),
+            video
+                .caption()
+                .unwrap_or_else(|| video.filename())
+                .trim()
+                .to_owned(),
+            Some(MediaMessage {
+                kind: "video".to_owned(),
+                filename: video.filename().to_owned(),
+                caption: video.caption().map(str::to_owned),
+                mxc_uri: plain_mxc_uri(&video.source),
+                mimetype: video.info.as_ref().and_then(|info| info.mimetype.clone()),
+                size: video
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.size.map(Into::into)),
+                width: video
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.width.map(Into::into)),
+                height: video
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.height.map(Into::into)),
+                duration_ms: video
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.duration)
+                    .map(duration_millis),
+                encrypted: matches!(video.source, MediaSource::Encrypted(_)),
+            }),
+        )),
+        _ => None,
+    }
+}
+
+fn media_source(msgtype: &MessageType) -> Option<MediaSource> {
+    match msgtype {
+        MessageType::Image(image) => Some(image.source.clone()),
+        MessageType::File(file) => Some(file.source.clone()),
+        MessageType::Video(video) => Some(video.source.clone()),
+        MessageType::Audio(audio) => Some(audio.source.clone()),
+        _ => None,
+    }
+}
+
+fn plain_mxc_uri(source: &MediaSource) -> Option<String> {
+    match source {
+        MediaSource::Plain(uri) => Some(uri.to_string()),
+        MediaSource::Encrypted(_) => None,
+    }
+}
+
+fn poll_from_content(content: &PollStartEventContent) -> PollMessage {
+    PollMessage {
+        question: content
+            .poll
+            .question
+            .text
+            .find_plain()
+            .unwrap_or_default()
+            .to_owned(),
+        kind: content.poll.kind.as_ref().to_owned(),
+        max_selections: content.poll.max_selections.into(),
+        answers: content
+            .poll
+            .answers
+            .iter()
+            .map(|answer| PollAnswer {
+                id: answer.id.clone(),
+                text: answer.text.find_plain().unwrap_or_default().to_owned(),
+            })
+            .collect(),
+    }
+}
+
+fn unstable_poll_from_content(content: &UnstablePollStartContentBlock) -> PollMessage {
+    PollMessage {
+        question: content.question.text.clone(),
+        kind: content.kind.as_ref().to_owned(),
+        max_selections: content.max_selections.into(),
+        answers: content
+            .answers
+            .iter()
+            .map(|answer| PollAnswer {
+                id: answer.id.clone(),
+                text: answer.text.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn duration_millis(duration: Duration) -> u64 {
+    duration.as_millis().try_into().unwrap_or(u64::MAX)
 }
 
 async fn replied_message(
@@ -73,18 +325,19 @@ async fn replied_message(
         return Ok(MatrixReplyTarget::Unsupported(reply_event_id.to_owned()));
     };
 
-    let body = match &message.content.msgtype {
-        MessageType::Text(text) => text.body.trim(),
-        MessageType::Notice(notice) => notice.body.trim(),
-        MessageType::ServerNotice(notice) => notice.body.trim(),
-        _ => return Ok(MatrixReplyTarget::Unsupported(reply_event_id.to_owned())),
+    let Some((message_type, body, media)) = message_parts(&message.content.msgtype) else {
+        return Ok(MatrixReplyTarget::Unsupported(reply_event_id.to_owned()));
     };
 
-    Ok(MatrixReplyTarget::Text(RepliedMessage::new(
-        reply_event_id.to_string(),
-        message.sender.to_string(),
-        body.to_owned(),
-    )))
+    let mut replied =
+        RepliedMessage::new(reply_event_id.to_string(), message.sender.to_string(), body)
+            .with_message_type(message_type);
+
+    if let Some(media) = media {
+        replied = replied.with_media(media);
+    }
+
+    Ok(MatrixReplyTarget::Text(replied))
 }
 
 fn replied_to_event_id(

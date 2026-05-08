@@ -1,73 +1,92 @@
 # matrix-bot-sdk
 
-Rust-backed SDK for building Matrix bots from Bun/TypeScript with an Express-style routing model.
+Rust runtime, Bun/TypeScript bot logic.
 
-The Matrix runtime is written in Rust and handles login, session restore, E2EE recovery, sync, reply extraction, and sending messages. Your bot logic stays in TypeScript as `SubBot` modules with middleware and handlers.
+This SDK is for building Matrix bots without writing Matrix sync, login, E2EE, invite handling, replies, uploads, or polling code yourself. Rust owns the Matrix runtime. TypeScript owns your bot behavior.
 
-## Current Status
+The mental model is:
 
-This SDK is usable locally from this repository. It is not published or packaged for npm yet.
+```text
+MatrixBot
+  -> SubBot      main command or feature, like !ping or !weather
+      -> MicroBot optional subcommand, like current or forecast
+```
 
-Working today:
+Use a `SubBot` directly for simple commands. Use `MicroBot` only when the command has subcommands.
 
-- `MatrixBot` root bot instance.
-- `SubBot` feature modules.
-- String, regex, and function route matchers.
-- Middleware with `next()`.
+## Status
+
+This repository is usable locally, but it is not packaged for npm yet.
+
+What works:
+
 - Matrix login and session restore.
-- E2EE recovery through recovery key.
+- E2EE recovery with a recovery key.
 - Owner-only invite acceptance.
-- Bounded Matrix sync backlog.
-- Text message extraction.
-- Reply target extraction for text, notice, and server notice events.
-- Plain text and Markdown send/reply helpers.
+- Bounded sync backlog.
+- Rust-side command prefiltering before events cross into Bun.
+- Text, reply, media, and poll receive metadata.
+- Plain text, Markdown, media, and poll send helpers.
+- Middleware.
+- Structured production logging.
+- One global error hook.
 
 Still rough:
 
-- Native binary is built locally with `devbox run build-native`.
-- Import path is local unless you wire this repo as a workspace dependency.
-- No npm package publishing or platform binary packaging yet.
-- Real homeserver behavior should be tested with your bot account.
+- You must build the native binding locally.
+- Import paths are local repo paths until packaging exists.
+- Admin command helpers are not built in yet.
 
-## Build And Test
+## Setup
+
+Build the native binding first:
 
 ```sh
 devbox run build-native
-devbox run test
-devbox run test-js
-devbox run test-native
 ```
 
-The native build creates:
+That creates:
 
 ```text
 js/native/matrix_bot_node.node
 ```
 
-## Quick Start
+Run tests:
 
-For Matrix.org accounts, use:
-
-```text
-https://matrix.org
+```sh
+devbox run test
+devbox run test-js
+devbox run test-native
 ```
 
-Example:
+## Smallest Bot
 
 ```ts
-import { MatrixBot, SubBot } from "../matrix-bot-sdk/js/src/index"
+import {
+  MatrixBot,
+  SubBot,
+  type MatrixRequest,
+  type MatrixResponse,
+} from "../matrix-bot-sdk/js/src/index"
 
 const bot = new MatrixBot({
   homeserverUrl: "https://matrix.org",
   username: Bun.env.BOT_USERNAME!,
   password: Bun.env.BOT_PASSWORD!,
   recoveryKey: Bun.env.RECOVERY_KEY!,
+  config: {
+    announceSubBotUsage: true,
+    selfDocumentation: true,
+  },
 })
 
-const ping = new SubBot("ping")
+const ping = new SubBot({
+  name: "ping",
+  command: ["!ping", "!p"],
+})
 
-ping.use("!ping", async (ctx) => {
-  await ctx.replyText("pong")
+ping.use(async (_req: MatrixRequest, res: MatrixResponse) => {
+  await res.replyText("pong")
 })
 
 bot.use(ping)
@@ -77,11 +96,16 @@ await bot.listen({
 })
 ```
 
-Before running a project that imports this SDK locally:
+User sends:
 
-```sh
-cd /Users/chirayu/Developer/matrix-bot-sdk
-devbox run build-native
+```text
+!ping
+```
+
+Bot replies:
+
+```text
+pong
 ```
 
 ## Runnable Example
@@ -97,13 +121,309 @@ devbox run build-native
 devbox run example
 ```
 
-The example lives at [examples/ping-bot.ts](examples/ping-bot.ts).
+The example is [examples/ping-bot.ts](examples/ping-bot.ts).
 
-## API
+## SubBot vs MicroBot
 
-### `new MatrixBot(options)`
+A `SubBot` is the feature boundary. It owns the top-level command.
 
-Creates the root bot.
+```ts
+const weather = new SubBot({
+  name: "weather",
+  command: ["!weather", "!w"],
+})
+```
+
+If the feature has one natural action, put the handler directly on the `SubBot`:
+
+```ts
+weather.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  await res.replyText(`Weather for ${req.body}`)
+})
+```
+
+This handles:
+
+```text
+!weather delhi
+!w delhi
+```
+
+If the feature has multiple actions, add `MicroBot`s:
+
+```ts
+import { MicroBot, SubBot } from "../matrix-bot-sdk/js/src/index"
+
+const weather = new SubBot({
+  name: "weather",
+  command: ["!weather", "!w"],
+})
+
+const current = new MicroBot({
+  name: "current",
+  command: ["current", "now"],
+})
+
+current.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  await res.replyText(`Current weather for ${req.body}`)
+})
+
+weather.use(current)
+```
+
+This handles:
+
+```text
+!weather current delhi
+!w now delhi
+```
+
+Routing consumes commands as it goes:
+
+| Input | Handler sees `req.body` |
+| --- | --- |
+| `!weather delhi` | `delhi` |
+| `!weather current delhi` | `delhi` |
+| `!w now delhi` | `delhi` |
+
+If a `SubBot` has both microbots and its own handler, microbots win first. The `SubBot` handler becomes the fallback.
+
+```ts
+weather.use(current)
+
+weather.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  await res.replyText(`Default weather lookup for ${req.body}`)
+})
+```
+
+When `config.announceSubBotUsage` is enabled and the main bot recognizes a runnable subbot command, it immediately sends a room notice:
+
+```text
+> using weather...
+```
+
+Only the `SubBot` name is announced. Microbot names are not shown. The feature is opt-in so production bots do not add chat noise unless you ask for it.
+
+## Self Documentation
+
+The bot can document its own mounted family tree because `MatrixBot`, `SubBot`, and `MicroBot` already know their names, commands, descriptions, and mounted children.
+
+When `config.selfDocumentation` is enabled, `listen()` writes:
+
+```text
+matrix-bot-family.md
+```
+
+The file includes the main bot, every mounted subbot, every mounted microbot, commands, descriptions, categories, and a text family tree.
+
+```ts
+const bot = new MatrixBot({
+  homeserverUrl,
+  username,
+  password,
+  recoveryKey,
+  config: {
+    selfDocumentation: true,
+    documentationPath: "matrix-bot-family.md",
+  },
+})
+```
+
+The file write is opt-in so `listen()` does not create files unexpectedly. You can also generate or write the file manually:
+
+```ts
+const markdown = bot.generateSelfDocumentation()
+await bot.writeSelfDocumentation("docs/bot-family.md")
+```
+
+## Middleware
+
+Middleware wraps a handler. It receives `(req, res, next)`.
+
+```ts
+const ownerOnly = (owners: string[]) => {
+  return async (
+    req: MatrixRequest,
+    res: MatrixResponse,
+    next: () => Promise<void>,
+  ) => {
+    if (!owners.includes(req.sender)) {
+      await res.replyText("Not allowed.")
+      return
+    }
+
+    await next()
+  }
+}
+
+ping.use(ownerOnly(["@you:matrix.org"]), async (
+  _req: MatrixRequest,
+  res: MatrixResponse,
+) => {
+  await res.replyText("pong")
+})
+```
+
+Calling `next()` more than once throws.
+
+## Replies
+
+If a user sends a command while replying to another message, the replied-to event is available as `req.repliedMessage`.
+
+```ts
+const fact = new SubBot({
+  name: "fact",
+  command: ["!fact", "!check"],
+})
+
+fact.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  const claim = req.body.trim() || req.repliedMessage?.body
+
+  if (!claim) {
+    await res.replyText("Usage: !fact <claim>, or reply to a message with !fact")
+    return
+  }
+
+  await res.sendText("Checking...")
+  await res.replyMarkdown(await checkClaim(claim))
+})
+```
+
+For example, `!ping` sent as a reply can inspect the original event:
+
+```ts
+ping.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  if (!req.repliedMessage) {
+    await res.replyText("pong")
+    return
+  }
+
+  await res.replyText(
+    `pong for ${req.repliedMessage.sender}'s ${req.repliedMessage.messageType}`,
+  )
+})
+```
+
+The runtime extracts replied event metadata from Matrix text, notice, server notice, image, file, and video messages. For media replies, `req.repliedMessage.body` is the caption or filename, and `req.repliedMessage.media` carries file metadata.
+
+If the user replied to unsupported content, `req.replyUnsupported` is `true`.
+
+## Media And Polls
+
+Incoming media is normalized onto `req.media`. For this to match a command, send the command as the media caption.
+
+```ts
+const images = new SubBot({
+  name: "image-info",
+  command: "!image",
+})
+
+images.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  if (req.messageType !== "image" || !req.media) {
+    await res.replyText("Send an image with caption !image")
+    return
+  }
+
+  const bytes = await res.downloadMedia()
+  await res.replyText(`${req.media.filename}: ${bytes.length} bytes`)
+})
+```
+
+Send media:
+
+```ts
+await res.sendImage("./result.png")
+await res.sendVideo("./clip.mp4")
+await res.sendFile("./report.pdf")
+
+await res.sendImage({
+  filename: "result.png",
+  contentType: "image/png",
+  data: imageBuffer,
+})
+
+await res.sendMedia("file", {
+  path: "./exports/result.csv",
+  filename: "latest-result.csv",
+})
+```
+
+String paths are read by the bot process, so relative paths are resolved from the process current working directory. Use the object form when you want to override the visible filename or content type.
+
+Send a poll:
+
+```ts
+await res.sendPoll({
+  question: "Ship it?",
+  answers: [
+    { id: "yes", text: "Yes" },
+    { id: "no", text: "No" },
+  ],
+})
+```
+
+## Logging
+
+Pass a logger when creating `MatrixBot`.
+
+```ts
+const bot = new MatrixBot({
+  homeserverUrl,
+  username,
+  password,
+  recoveryKey,
+  logger(event) {
+    process.stdout.write(`${JSON.stringify(event)}\n`)
+  },
+})
+```
+
+Log events are structured:
+
+```ts
+type MatrixLogEvent = {
+  level: "debug" | "info" | "warn" | "error"
+  message: string
+  component: "sdk" | "runtime" | "dispatch"
+  eventId?: string
+  roomId?: string
+  sender?: string
+  handled?: number
+  durationMs?: number
+  error?: string
+}
+```
+
+The default logger writes JSON for `info`, `warn`, and `error`. It drops `debug`.
+
+Runtime logs from Rust are also sent through this logger.
+
+## Global Error Handler
+
+Use `onError` once instead of wrapping every handler in `try/catch`.
+
+```ts
+const bot = new MatrixBot({
+  homeserverUrl,
+  username,
+  password,
+  recoveryKey,
+  async onError({ error, phase, request }) {
+    await sendToOps({
+      phase,
+      eventId: request?.eventId,
+      roomId: request?.roomId,
+      error,
+    })
+  },
+})
+```
+
+Handler errors are caught at the dispatch boundary and do not stop the sync loop.
+
+## API Shape
+
+### `MatrixBot`
 
 ```ts
 const bot = new MatrixBot({
@@ -112,354 +432,121 @@ const bot = new MatrixBot({
   password: "...",
   recoveryKey: "...",
   dataDir: ".matrix-bot-sdk",
+  config: {
+    announceSubBotUsage: true,
+    selfDocumentation: true,
+    documentationPath: "matrix-bot-family.md",
+  },
+  logger,
+  onError,
 })
 ```
 
-Options:
-
-| Field | Type | Required | Meaning |
-| --- | --- | --- | --- |
-| `homeserverUrl` | `string` | Yes | Matrix homeserver URL, for example `https://matrix.org`. |
-| `username` | `string` | Yes | Bot Matrix user id or login username. |
-| `password` | `string` | Yes | Bot account password. |
-| `recoveryKey` | `string` | Yes | Matrix E2EE recovery key. |
-| `dataDir` | `string` | No | Where session/store/cache files live. Defaults inside the SDK config path. |
-
-### `bot.use(subBot)`
-
-Mounts a `SubBot`.
-
-```ts
-bot.use(factCheckBot)
-bot.use(imdbBot)
-```
-
-Sub-bot names must be unique.
-
-### `bot.listen(options)`
-
-Starts the Matrix runtime and keeps the process alive.
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `homeserverUrl` | Yes | Matrix homeserver URL. |
+| `username` | Yes | Bot Matrix user id or login username. |
+| `password` | Yes | Bot account password. |
+| `recoveryKey` | Yes | Matrix E2EE recovery key. |
+| `dataDir` | No | Session, store, and cache directory. |
+| `config.announceSubBotUsage` | No | Sends `> using <subbot>...` before running a matched subbot. Defaults to `false`. |
+| `config.selfDocumentation` | No | Writes bot family Markdown when `listen()` starts. Defaults to `false`. |
+| `config.documentationPath` | No | Markdown output path. Defaults to `matrix-bot-family.md`. |
+| `logger` | No | Production log sink. |
+| `onError` | No | Global runtime or dispatch error hook. |
 
 ```ts
+bot.use(subBot)
+
 await bot.listen({
   owners: ["@you:matrix.org"],
   timelineLimit: 20,
 })
 ```
 
-Options:
+| Listen option | Required | Meaning |
+| --- | --- | --- |
+| `owners` | Yes | Users allowed to invite the bot into rooms. |
+| `timelineLimit` | No | Per-room sync backlog cap. Defaults to `20`. |
 
-| Field | Type | Required | Meaning |
-| --- | --- | --- | --- |
-| `owners` | `string[]` | Yes | Users allowed to invite the bot into rooms. |
-| `timelineLimit` | `number` | No | Per-room sync backlog cap. Defaults to `20`. |
-| `controlPassword` | `string` | No | Reserved for admin controls. Not fully wired yet. |
-
-### `bot.dispatch(ctx)`
-
-Runs all matching mounted sub-bots against a context. Mainly useful for tests.
+### `SubBot`
 
 ```ts
-const handled = await bot.dispatch(ctx)
-```
-
-Returns the number of matched routes.
-
-### `bot.nativeAvailable`
-
-Boolean. `true` when `js/native/matrix_bot_node.node` was found.
-
-### `bot.subBotCount`
-
-Number of mounted sub-bots. Uses the native count when native is loaded.
-
-## SubBot API
-
-### `new SubBot(name)`
-
-Creates a named module.
-
-```ts
-const factCheckBot = new SubBot("factcheck")
-```
-
-### `subBot.use(matcher, ...middleware, handler)`
-
-Registers a route.
-
-```ts
-factCheckBot.use("!check", authMiddleware, async (ctx) => {
-  await ctx.replyMarkdown("**Verdict:** Unverified")
+const fact = new SubBot({
+  name: "fact",
+  command: ["!fact", "!check"],
+  description: "Checks claims.",
+  category: "Utility",
+  adminOnly: false,
+  config: {},
 })
 ```
 
-The last function is the handler. Any functions before it are middleware.
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `name` | Yes | Unique module name. |
+| `command` | Yes | Main command or aliases. |
+| `commands` | No | Extra aliases merged with `command`. |
+| `description` | No | Help text metadata. |
+| `category` | No | Grouping metadata. |
+| `adminOnly` | No | Admin metadata flag. |
+| `config` | No | Module-specific dependencies or settings. |
 
-### `subBot.dispatch(ctx)`
+Sub-bot names and command aliases must be unique. In native mode, these aliases are registered with Rust so unrelated Matrix events can be ignored before Bun sees them.
 
-Runs matching routes for this sub-bot. Mainly useful for tests.
-
-## Route Matchers
-
-### String Prefix
-
-String matchers use `startsWith`.
-
-```ts
-bot.use(new SubBot("ping").use("!ping", async (ctx) => {
-  await ctx.replyText("pong")
-}))
-```
-
-This matches:
-
-```text
-!ping
-!ping hello
-```
-
-### Regular Expression
+### Request
 
 ```ts
-imdbBot.use(/^!imdb\s+(.+)/, async (ctx) => {
-  const query = ctx.body.replace(/^!imdb\s+/, "")
-  await ctx.replyText(`Searching IMDb for ${query}`)
-})
-```
-
-### Function Matcher
-
-```ts
-const replyToBot = (ctx) => Boolean(ctx.repliedMessage)
-
-followupBot.use(replyToBot, async (ctx) => {
-  await ctx.replyText("I saw your reply.")
-})
-```
-
-Unsupported reply target fallback:
-
-```ts
-bot.use(
-  (ctx) => ctx.replyUnsupported,
-  async (ctx) => {
-    await ctx.replyText("this feature willcome sson")
-  },
-)
-```
-
-## Middleware
-
-Middleware receives `(ctx, next)`.
-
-```ts
-const ownerOnly = (owners: string[]) => {
-  return async (ctx, next) => {
-    if (!owners.includes(ctx.sender)) {
-      await ctx.replyText("Not allowed.")
-      return
-    }
-
-    await next()
-  }
-}
-
-factCheckBot.use("!check", ownerOnly(["@you:matrix.org"]), async (ctx) => {
-  await ctx.replyText("checking")
-})
-```
-
-Middleware can run code before and after the handler:
-
-```ts
-const timing = async (ctx, next) => {
-  const started = Date.now()
-  await next()
-  console.log(`${ctx.eventId} took ${Date.now() - started}ms`)
-}
-```
-
-Calling `next()` more than once throws.
-
-## Handler Context
-
-Every handler and middleware receives `ctx`.
-
-```ts
-type MatrixContext = {
+type MatrixRequest = {
   eventId: string
   roomId: string
   sender: string
+  messageType: "text" | "notice" | "server_notice" | "image" | "file" | "video" | "poll"
+  rawBody: string
   body: string
+  media?: MediaMessage
+  poll?: PollMessage
   repliedMessage?: RepliedMessage
   replyUnsupported: boolean
-  sendText(body: string): Promise<void>
-  sendMarkdown(body: string): Promise<void>
-  replyText(body: string): Promise<void>
-  replyMarkdown(body: string): Promise<void>
 }
 ```
-
-### `ctx.eventId`
-
-The incoming Matrix event id.
-
-### `ctx.roomId`
-
-The Matrix room id where the message arrived.
-
-### `ctx.sender`
-
-The Matrix user id of the sender.
-
-```ts
-if (ctx.sender === "@you:matrix.org") {
-  await ctx.replyText("hello owner")
-}
-```
-
-### `ctx.body`
-
-Trimmed text body from the incoming message.
-
-```ts
-const claim = ctx.body.replace(/^!check\s*/, "")
-```
-
-### `ctx.repliedMessage`
-
-Present when the incoming message replied to a text-like event.
-
-```ts
-factCheckBot.use("!check", async (ctx) => {
-  const claim = ctx.body === "!check"
-    ? ctx.repliedMessage?.body
-    : ctx.body.replace(/^!check\s*/, "")
-
-  if (!claim) {
-    await ctx.replyText("Usage: !check <claim>")
-    return
-  }
-
-  await ctx.replyMarkdown(`**Claim:** ${claim}`)
-})
-```
-
-Shape:
 
 ```ts
 type RepliedMessage = {
   eventId: string
   sender: string
+  messageType: "text" | "notice" | "server_notice" | "image" | "file" | "video" | "poll"
   body: string
+  media?: MediaMessage
 }
 ```
 
-The Rust runtime currently extracts replied text from:
+`rawBody` is the original text. `body` is the remaining text after routing consumes the matched command tokens.
 
-- `m.text`
-- `m.notice`
-- `m.server_notice`
-
-### `ctx.replyUnsupported`
-
-`true` when the incoming message was a reply, but the replied-to event was not usable text.
+### Response
 
 ```ts
-if (ctx.replyUnsupported) {
-  await ctx.replyText("this feature willcome sson")
+type MatrixResponse = {
+  sendText(body: string): Promise<void>
+  sendMarkdown(body: string): Promise<void>
+  sendMedia(kind: "image" | "file" | "video", attachment: MediaAttachment): Promise<void>
+  sendImage(attachment: MediaAttachment): Promise<void>
+  sendFile(attachment: MediaAttachment): Promise<void>
+  sendVideo(attachment: MediaAttachment): Promise<void>
+  sendPoll(poll: OutboundPoll): Promise<void>
+  replyText(body: string): Promise<void>
+  replyMarkdown(body: string): Promise<void>
+  downloadMedia(): Promise<Buffer>
 }
 ```
 
-### `ctx.sendText(body)`
-
-Sends a plain Matrix notice to the room. It is not threaded as a reply.
+`send*` posts to the room. `reply*` replies to the incoming event.
 
 ```ts
-await ctx.sendText("Checking...")
-```
-
-### `ctx.sendMarkdown(body)`
-
-Sends a Markdown Matrix notice to the room.
-
-```ts
-await ctx.sendMarkdown("**Checking...**")
-```
-
-### `ctx.replyText(body)`
-
-Replies to the incoming event with a plain Matrix notice.
-
-```ts
-await ctx.replyText("pong")
-```
-
-### `ctx.replyMarkdown(body)`
-
-Replies to the incoming event with Matrix-rendered Markdown.
-
-```ts
-await ctx.replyMarkdown("**Verdict:** Unverified")
-```
-
-## Practical Bot Patterns
-
-### Immediate Acknowledgement
-
-For slow handlers, send a plain room notice first.
-
-```ts
-factCheckBot.use("!check", async (ctx) => {
-  await ctx.sendText("Checking...")
-  const answer = await factCheck(ctx.body)
-  await ctx.replyMarkdown(answer)
-})
-```
-
-### Reply-Based Command
-
-```ts
-factCheckBot.use("!check", async (ctx) => {
-  const inlineClaim = ctx.body.replace(/^!check\s*/, "").trim()
-  const claim = inlineClaim || ctx.repliedMessage?.body
-
-  if (!claim) {
-    await ctx.replyText("Usage: !check <claim>")
-    return
-  }
-
-  await ctx.sendText("Checking...")
-  await ctx.replyMarkdown(await factCheck(claim))
-})
-```
-
-### Multiple Sub-Bots
-
-```ts
-const factCheckBot = new SubBot("factcheck")
-const imdbBot = new SubBot("imdb")
-
-factCheckBot.use("!check", factCheckHandler)
-imdbBot.use("!imdb", imdbHandler)
-
-bot.use(factCheckBot)
-bot.use(imdbBot)
-```
-
-## Local Project Import
-
-Until package publishing is added, import from the local repo:
-
-```ts
-import { MatrixBot, SubBot } from "../matrix-bot-sdk/js/src/index"
-```
-
-Build the native binding in the SDK repo first:
-
-```sh
-cd /Users/chirayu/Developer/matrix-bot-sdk
-devbox run build-native
+type MediaAttachment =
+  | string
+  | { path: string; filename?: string; contentType?: string }
+  | { filename: string; contentType: string; data: Buffer | Uint8Array }
 ```
 
 ## Environment Variables Used By The Example
@@ -476,8 +563,7 @@ devbox run build-native
 
 ## Notes
 
+- `listen()` intentionally never resolves while the bot is running.
 - The SDK sends Matrix notices, not normal user text messages.
-- `replyMarkdown` and `sendMarkdown` require the Rust runtime build with Matrix markdown support, which is enabled here.
-- `listen()` intentionally does not resolve while the bot is running.
-- Native runtime errors during startup currently print to stderr from the Rust runtime thread.
-- `controlPassword` is reserved but not implemented as a full admin command system yet.
+- Markdown helpers render Matrix-formatted Markdown.
+- Package publishing and platform binary distribution are not implemented yet.

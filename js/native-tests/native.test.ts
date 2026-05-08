@@ -8,7 +8,7 @@ test("native binding registers sub-bots", () => {
     password: "secret",
     recoveryKey: "recovery",
   })
-  const subBot = new SubBot("factcheck")
+  const subBot = new SubBot({ name: "factcheck", command: "!check" })
 
   bot.use(subBot)
 
