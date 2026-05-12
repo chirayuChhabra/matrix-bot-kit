@@ -329,6 +329,29 @@ images.use(async (req: MatrixRequest, res: MatrixResponse) => {
 })
 ```
 
+If a command is sent as a reply to a media message, download that replied-to media by event id:
+
+```ts
+images.use(async (req: MatrixRequest, res: MatrixResponse) => {
+  if (!req.repliedMessage?.media) {
+    await res.replyText("Reply to an image or document with !image")
+    return
+  }
+
+  const bytes = await res.downloadMedia({
+    eventId: req.repliedMessage.eventId,
+  })
+
+  await res.replyText(`${req.repliedMessage.media.filename}: ${bytes.length} bytes`)
+})
+```
+
+You can also download media from the bot client when you already have both ids:
+
+```ts
+const bytes = await bot.downloadMedia(roomId, eventId)
+```
+
 Send media:
 
 ```ts
@@ -536,11 +559,18 @@ type MatrixResponse = {
   sendPoll(poll: OutboundPoll): Promise<void>
   replyText(body: string): Promise<void>
   replyMarkdown(body: string): Promise<void>
-  downloadMedia(): Promise<Buffer>
+  downloadMedia(target?: string | { roomId?: string; eventId?: string }): Promise<Buffer>
 }
 ```
 
 `send*` posts to the room. `reply*` replies to the incoming event.
+`downloadMedia()` returns the incoming event's bytes. Pass an event id, or `{ eventId }`, to download another media event from the same room. Pass `{ roomId, eventId }` to download from a specific room.
+
+The bot client also exposes:
+
+```ts
+await bot.downloadMedia(roomId, eventId)
+```
 
 ```ts
 type MediaAttachment =

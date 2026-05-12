@@ -58,7 +58,7 @@ export type MatrixResponse = {
   sendPoll(poll: OutboundPoll): Promise<void>
   replyText(body: string): Promise<void>
   replyMarkdown(body: string): Promise<void>
-  downloadMedia(): Promise<Buffer>
+  downloadMedia(target?: MediaDownloadTarget): Promise<Buffer>
 }
 
 export type MediaMessage = {
@@ -72,6 +72,11 @@ export type MediaMessage = {
   height?: number
   durationMs?: number
   encrypted: boolean
+}
+
+export type MediaDownloadTarget = string | {
+  roomId?: string
+  eventId?: string
 }
 
 export type MediaKind = "image" | "file" | "video"
@@ -328,6 +333,14 @@ export class MatrixBot {
     await new Promise<void>(() => {})
   }
 
+  async downloadMedia(roomId: string, eventId: string): Promise<Buffer> {
+    if (!this.native) {
+      throw new Error("native Matrix runtime binding is missing")
+    }
+
+    return this.native.downloadMedia(roomId, eventId)
+  }
+
   generateSelfDocumentation(): string {
     return generateBotDocumentation(this)
   }
@@ -422,7 +435,10 @@ export class MatrixBot {
       replyText: (body) => native.replyText(message.roomId, message.eventId, body),
       replyMarkdown: (body) =>
         native.replyMarkdown(message.roomId, message.eventId, body),
-      downloadMedia: () => native.downloadMedia(message.roomId, message.eventId),
+      downloadMedia: (target) => {
+        const resolvedTarget = resolveMediaDownloadTarget(target, message)
+        return native.downloadMedia(resolvedTarget.roomId, resolvedTarget.eventId)
+      },
     }
   }
 
@@ -781,6 +797,23 @@ function optionalNumber(value: number | bigint | undefined): number | undefined 
   }
 
   return Number(value)
+}
+
+function resolveMediaDownloadTarget(
+  target: MediaDownloadTarget | undefined,
+  message: Pick<NativeIncomingMessage, "roomId" | "eventId">,
+): { roomId: string; eventId: string } {
+  if (typeof target === "string") {
+    return {
+      roomId: message.roomId,
+      eventId: target,
+    }
+  }
+
+  return {
+    roomId: target?.roomId ?? message.roomId,
+    eventId: target?.eventId ?? message.eventId,
+  }
 }
 
 export async function normalizeMediaAttachment(

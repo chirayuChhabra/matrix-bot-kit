@@ -1,3 +1,4 @@
 /target/
 /.devbox/
 /js/native/*.node
+/node_modules/
