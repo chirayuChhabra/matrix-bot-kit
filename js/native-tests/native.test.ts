@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { MatrixBot, SubBot } from "../src/index"
+import { Ajent, MatrixBot, SubBot } from "../src/index"
 
 test("native binding registers sub-bots", () => {
   const bot = new MatrixBot({
@@ -15,6 +15,25 @@ test("native binding registers sub-bots", () => {
   expect(bot.nativeAvailable).toBe(true)
   expect(subBot.name).toBe("factcheck")
   expect(bot.subBotCount).toBe(1)
+})
+
+test("native binding registers ajents", () => {
+  const bot = new MatrixBot({
+    homeserverUrl: "https://matrix.example.org",
+    username: "@bot:example.org",
+    password: "secret",
+    recoveryKey: "recovery",
+  })
+  const ajent = new Ajent({
+    name: "watcher",
+    triggers: [{ kind: "matrix.message", messageTypes: ["image"] }],
+  })
+
+  bot.use(ajent)
+
+  expect(bot.nativeAvailable).toBe(true)
+  expect(ajent.name).toBe("watcher")
+  expect(bot.ajentCount).toBe(1)
 })
 
 test("native-backed wrapper exposes listen prerequisites", async () => {

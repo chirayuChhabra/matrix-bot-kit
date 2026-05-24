@@ -3,6 +3,7 @@ import { basename, extname } from "node:path"
 import {
   loadNativeBinding,
   type MatrixMessageType,
+  type NativeAjentMatrixMessageTrigger,
   type NativeIncomingMessage,
   type NativeMediaAttachment,
 } from "./native"
@@ -156,6 +157,62 @@ export type Middleware = (
 ) => Promise<void> | void
 export type Handler = (req: MatrixRequest, res: MatrixResponse) => Promise<void> | void
 
+export type AjentEventKind = "matrix.message" | "schedule" | "external"
+
+export type AjentEvent = {
+  id: string
+  kind: AjentEventKind
+  source: string
+  timestamp: Date
+  name?: string
+  request?: MatrixRequest
+  payload?: unknown
+}
+
+export type AjentActions = {
+  matrix?: MatrixResponse
+}
+
+export type AjentHandler = (
+  event: AjentEvent,
+  actions: AjentActions,
+) => Promise<void> | void
+
+export type AjentMatrixMessageTrigger = {
+  kind: "matrix.message"
+  messageTypes?: MatrixMessageType[]
+  rooms?: string[]
+  senders?: string[]
+}
+
+export type AjentExternalTrigger = {
+  kind: "external"
+  source?: string | string[]
+  event?: string | string[]
+}
+
+export type AjentScheduleTrigger = {
+  kind: "schedule"
+  everyMs?: number
+  at?: Date | string
+  source?: string
+}
+
+export type AjentTrigger =
+  | "matrix.message"
+  | AjentMatrixMessageTrigger
+  | AjentExternalTrigger
+  | AjentScheduleTrigger
+
+export type AjentConfig = Record<string, unknown>
+
+export type AjentOptions<TConfig extends AjentConfig = AjentConfig> = {
+  name: string
+  description?: string
+  triggers?: AjentTrigger[]
+  config?: TConfig
+}
+
 export type SubBotConfig = Record<string, unknown>
 
 export type SubBotOptions<TConfig extends SubBotConfig = SubBotConfig> = {
@@ -182,10 +239,12 @@ export type MicroBotOptions<TConfig extends MicroBotConfig = MicroBotConfig> = {
 export class MatrixBot {
   readonly options: MatrixBotOptions
   readonly subBots: SubBot[] = []
+  readonly ajents: Ajent[] = []
   private readonly native
   private readonly logger: MatrixLogger
   private readonly errorHandler: MatrixErrorHandler
   private readonly config: ResolvedMatrixBotRuntimeConfig
+  private scheduleTimers: Array<ReturnType<typeof setInterval> | ReturnType<typeof setTimeout>> = []
 
   constructor(options: MatrixBotOptions) {
     assertPresent("homeserverUrl", options.homeserverUrl)
@@ -201,7 +260,15 @@ export class MatrixBot {
       : undefined
   }
 
-  use(subBot: SubBot): this {
+  use(component: SubBot | Ajent): this {
+    if (component instanceof Ajent) {
+      return this.useAjent(component)
+    }
+
+    return this.useSubBot(component)
+  }
+
+  useSubBot(subBot: SubBot): this {
     if (this.subBots.some((existing) => existing.name === subBot.name)) {
       throw new Error(`a sub-bot named \`${subBot.name}\` is already registered`)
     }
@@ -223,12 +290,28 @@ export class MatrixBot {
     return this
   }
 
+  useAjent(ajent: Ajent): this {
+    if (this.ajents.some((existing) => existing.name === ajent.name)) {
+      throw new Error(`an ajent named \`${ajent.name}\` is already registered`)
+    }
+
+    this.ajents.push(ajent)
+    if (this.native?.registerAjent && ajent.native) {
+      this.native.registerAjent(ajent.native)
+    }
+    return this
+  }
+
   get nativeAvailable(): boolean {
     return this.native !== undefined
   }
 
   get subBotCount(): number {
     return this.native?.subBotCount ?? this.subBots.length
+  }
+
+  get ajentCount(): number {
+    return this.native?.ajentCount ?? this.ajents.length
   }
 
   async dispatch(req: MatrixRequest, res: MatrixResponse): Promise<number> {
@@ -255,6 +338,44 @@ export class MatrixBot {
       component: "dispatch",
     })
     return handled
+  }
+
+  async dispatchAjents(event: AjentEvent, actions: AjentActions = {}): Promise<number> {
+    const started = Date.now()
+    let handled = 0
+    try {
+      for (const ajent of this.ajents) {
+        handled += await ajent.dispatch(event, actions)
+      }
+    } catch (error) {
+      await this.handleError({ error, phase: "dispatch", request: event.request })
+      return handled
+    }
+
+    this.log(handled > 0 ? "info" : "debug", "Ajent event dispatched", {
+      eventId: event.request?.eventId ?? event.id,
+      roomId: event.request?.roomId,
+      sender: event.request?.sender,
+      handled,
+      durationMs: Date.now() - started,
+      component: "dispatch",
+    })
+    return handled
+  }
+
+  async emitExternal(
+    source: string,
+    name: string,
+    payload?: unknown,
+  ): Promise<number> {
+    return this.dispatchAjents({
+      id: `${source}:${name}:${Date.now()}`,
+      kind: "external",
+      source,
+      name,
+      payload,
+      timestamp: new Date(),
+    })
   }
 
   private async sendSubBotUsageNotice(
@@ -312,12 +433,16 @@ export class MatrixBot {
         timelineLimit: options.timelineLimit,
       },
       (message) => {
-        this.dispatch(
-          this.requestFromNative(message),
-          this.responseFromNative(message),
-        ).catch((error) => {
+        const request = this.requestFromNative(message)
+        const response = this.responseFromNative(message)
+        this.dispatch(request, response).catch((error) => {
           void this.handleError({ error, phase: "dispatch" })
         })
+        this.dispatchAjents(matrixMessageAjentEvent(request), { matrix: response }).catch(
+          (error) => {
+            void this.handleError({ error, phase: "dispatch", request })
+          },
+        )
       },
       (event) => {
         this.log(event.level, event.message, {
@@ -329,6 +454,8 @@ export class MatrixBot {
     this.log("info", "Matrix bot runtime started", {
       component: "runtime",
     })
+
+    this.startAjentSchedules()
 
     await new Promise<void>(() => {})
   }
@@ -360,6 +487,31 @@ export class MatrixBot {
     }
 
     await this.writeSelfDocumentation()
+  }
+
+  private startAjentSchedules(): void {
+    if (this.scheduleTimers.length > 0) {
+      return
+    }
+
+    for (const ajent of this.ajents) {
+      for (const trigger of ajent.scheduleTriggers()) {
+        if (trigger.everyMs !== undefined) {
+          const timer = setInterval(() => {
+            void this.dispatchAjents(scheduleAjentEvent(trigger))
+          }, trigger.everyMs)
+          this.scheduleTimers.push(timer)
+        }
+
+        if (trigger.at !== undefined) {
+          const delayMs = Math.max(0, new Date(trigger.at).getTime() - Date.now())
+          const timer = setTimeout(() => {
+            void this.dispatchAjents(scheduleAjentEvent(trigger))
+          }, delayMs)
+          this.scheduleTimers.push(timer)
+        }
+      }
+    }
   }
 
   private requestFromNative(message: NativeIncomingMessage): MatrixRequest {
@@ -469,6 +621,51 @@ export class MatrixBot {
     fields: Omit<MatrixLogEvent, "level" | "message">,
   ): void {
     this.logger({ level, message, ...fields })
+  }
+}
+
+export class Ajent<TConfig extends AjentConfig = AjentConfig> {
+  readonly name: string
+  readonly description?: string
+  readonly triggers: NormalizedAjentTrigger[]
+  readonly config: TConfig
+  readonly native
+  private handler?: AjentHandler
+
+  constructor(options: AjentOptions<TConfig>) {
+    assertPresent("name", options.name)
+    this.name = options.name
+    this.description = options.description
+    this.triggers = normalizeAjentTriggers(options.triggers)
+    this.config = (options.config ?? {}) as TConfig
+    this.native = nativeBinding?.Ajent
+      ? new nativeBinding.Ajent(this.name, nativeAjentMatrixMessageTriggers(this.triggers))
+      : undefined
+  }
+
+  use(handler: AjentHandler): this {
+    this.handler = handler
+    return this
+  }
+
+  async dispatch(event: AjentEvent, actions: AjentActions): Promise<number> {
+    if (!this.handler || !this.matches(event)) {
+      return 0
+    }
+
+    await this.handler(event, actions)
+    return 1
+  }
+
+  matches(event: AjentEvent): boolean {
+    return this.triggers.some((trigger) => ajentTriggerMatches(trigger, event))
+  }
+
+  scheduleTriggers(): NormalizedAjentScheduleTrigger[] {
+    return this.triggers.filter(
+      (trigger): trigger is NormalizedAjentScheduleTrigger =>
+        trigger.kind === "schedule",
+    )
   }
 }
 
@@ -611,6 +808,138 @@ export class MicroBot<TConfig extends MicroBotConfig = MicroBotConfig> {
   }
 }
 
+type NormalizedAjentMatrixMessageTrigger = {
+  kind: "matrix.message"
+  messageTypes?: MatrixMessageType[]
+  rooms?: string[]
+  senders?: string[]
+}
+
+type NormalizedAjentExternalTrigger = {
+  kind: "external"
+  source?: string[]
+  event?: string[]
+}
+
+type NormalizedAjentScheduleTrigger = {
+  kind: "schedule"
+  everyMs?: number
+  at?: Date | string
+  source: string
+}
+
+type NormalizedAjentTrigger =
+  | NormalizedAjentMatrixMessageTrigger
+  | NormalizedAjentExternalTrigger
+  | NormalizedAjentScheduleTrigger
+
+function normalizeAjentTriggers(
+  triggers: AjentTrigger[] = ["matrix.message"],
+): NormalizedAjentTrigger[] {
+  return triggers.map((trigger) => {
+    if (trigger === "matrix.message") {
+      return { kind: "matrix.message" }
+    }
+
+    if (trigger.kind === "external") {
+      return {
+        ...trigger,
+        source: arrayFromOptionalValue(trigger.source),
+        event: arrayFromOptionalValue(trigger.event),
+      }
+    }
+
+    if (trigger.kind === "schedule") {
+      if (trigger.everyMs === undefined && trigger.at === undefined) {
+        throw new Error("schedule ajent trigger requires `everyMs` or `at`")
+      }
+      if (trigger.everyMs !== undefined && trigger.everyMs <= 0) {
+        throw new Error("schedule ajent trigger `everyMs` must be greater than 0")
+      }
+
+      return {
+        ...trigger,
+        source: trigger.source ?? "schedule",
+      }
+    }
+
+    return trigger
+  })
+}
+
+function nativeAjentMatrixMessageTriggers(
+  triggers: NormalizedAjentTrigger[],
+): NativeAjentMatrixMessageTrigger[] {
+  return triggers
+    .filter(
+      (trigger): trigger is NormalizedAjentMatrixMessageTrigger =>
+        trigger.kind === "matrix.message",
+    )
+    .map((trigger) => ({
+      messageTypes: trigger.messageTypes,
+    }))
+}
+
+function ajentTriggerMatches(
+  trigger: NormalizedAjentTrigger,
+  event: AjentEvent,
+): boolean {
+  if (trigger.kind !== event.kind) {
+    return false
+  }
+
+  if (trigger.kind === "matrix.message") {
+    const request = event.request
+    if (!request) {
+      return false
+    }
+
+    return matchesOptionalList(trigger.messageTypes, request.messageType)
+      && matchesOptionalList(trigger.rooms, request.roomId)
+      && matchesOptionalList(trigger.senders, request.sender)
+  }
+
+  if (trigger.kind === "external") {
+    return matchesOptionalList(trigger.source, event.source)
+      && matchesOptionalList(trigger.event, event.name)
+  }
+
+  return matchesOptionalList([trigger.source], event.source)
+}
+
+function matrixMessageAjentEvent(request: MatrixRequest): AjentEvent {
+  return {
+    id: request.eventId,
+    kind: "matrix.message",
+    source: "matrix",
+    request,
+    timestamp: new Date(),
+  }
+}
+
+function scheduleAjentEvent(trigger: NormalizedAjentScheduleTrigger): AjentEvent {
+  return {
+    id: `${trigger.source}:${Date.now()}`,
+    kind: "schedule",
+    source: trigger.source,
+    timestamp: new Date(),
+  }
+}
+
+function matchesOptionalList<T>(values: readonly T[] | undefined, value: T | undefined): boolean {
+  return values === undefined || values.length === 0 || (
+    value !== undefined && values.includes(value)
+  )
+}
+
+function arrayFromOptionalValue(value?: string | string[]): string[] | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  return Array.isArray(value) ? value : [value]
+}
+
 function assertPresent(field: string, value: string): void {
   if (value.trim().length === 0) {
     throw new Error(`${field} is required`)
@@ -654,6 +983,7 @@ function generateBotDocumentation(bot: MatrixBot): string {
     `- User: ${formatInline(bot.options.username)}`,
     `- Homeserver: ${formatInline(bot.options.homeserverUrl)}`,
     `- Sub-bots: ${bot.subBots.length}`,
+    `- Ajents: ${bot.ajents.length}`,
     "",
     "## Family Tree",
     "",
@@ -676,9 +1006,15 @@ function generateBotDocumentation(bot: MatrixBot): string {
     }
   }
 
+  if (bot.ajents.length > 0) {
+    for (const ajent of bot.ajents) {
+      lines.push(`  -> ${ajent.name} [ajent]`)
+    }
+  }
+
   lines.push("```", "", "## Commands", "")
 
-  if (bot.subBots.length === 0) {
+  if (bot.subBots.length === 0 && bot.ajents.length === 0) {
     lines.push("No commands are mounted.", "")
     return lines.join("\n")
   }
@@ -710,11 +1046,26 @@ function generateBotDocumentation(bot: MatrixBot): string {
     lines.push("")
   }
 
+  if (bot.ajents.length > 0) {
+    lines.push("## Ajents", "")
+    for (const ajent of bot.ajents) {
+      lines.push(`### ${ajent.name}`, "")
+      lines.push(`- Type: Ajent`)
+      lines.push(`- Triggers: ${formatAjentTriggers(ajent.triggers)}`)
+      lines.push(`- Description: ${ajent.description ?? "No description."}`)
+      lines.push("")
+    }
+  }
+
   return lines.join("\n")
 }
 
 function formatCommandList(commands: string[]): string {
   return commands.map(formatInline).join(", ")
+}
+
+function formatAjentTriggers(triggers: NormalizedAjentTrigger[]): string {
+  return triggers.map((trigger) => formatInline(trigger.kind)).join(", ")
 }
 
 function formatInline(value: string): string {

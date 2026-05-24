@@ -16,11 +16,21 @@ type NativeMatrixBot = {
   replyMarkdown(roomId: string, eventId: string, body: string): Promise<void>
   downloadMedia(roomId: string, eventId: string): Promise<Buffer>
   registerSubBot(subBot: NativeSubBot): void
+  registerAjent?(ajent: NativeAjent): void
   subBotCount: number
+  ajentCount: number
 }
 
 type NativeSubBot = {
   name: string
+}
+
+type NativeAjent = {
+  name: string
+}
+
+export type NativeAjentMatrixMessageTrigger = {
+  messageTypes?: MatrixMessageType[]
 }
 
 export type NativeListenOptions = {
@@ -105,6 +115,10 @@ export type NativeBinding = {
     dataDir?: string
   }) => NativeMatrixBot
   SubBot: new (name: string, commands?: string[]) => NativeSubBot
+  Ajent?: new (
+    name: string,
+    matrixMessageTriggers?: NativeAjentMatrixMessageTrigger[],
+  ) => NativeAjent
 }
 
 export function loadNativeBinding(): NativeBinding | undefined {

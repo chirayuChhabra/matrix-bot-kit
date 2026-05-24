@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   MatrixBot,
+  Ajent,
   MicroBot,
   SubBot,
   normalizeMediaAttachment,
@@ -68,6 +69,121 @@ test("rejects duplicate sub-bot commands", () => {
   expect(() =>
     bot.use(new SubBot({ name: "claims", command: ["!claim", "!fc"] })),
   ).toThrow("command `!fc` is already registered by another sub-bot")
+})
+
+test("registers ajents in mount order", () => {
+  const bot = new MatrixBot(options)
+  const watcher = new Ajent({ name: "watcher" })
+  const indexer = new Ajent({ name: "indexer" })
+
+  bot.use(watcher).use(indexer)
+
+  expect(bot.ajents.map((ajent) => ajent.name)).toEqual(["watcher", "indexer"])
+  expect(bot.ajentCount).toBe(2)
+})
+
+test("rejects duplicate ajent names", () => {
+  const bot = new MatrixBot(options)
+
+  bot.use(new Ajent({ name: "watcher" }))
+
+  expect(() => bot.use(new Ajent({ name: "watcher" }))).toThrow(
+    "an ajent named `watcher` is already registered",
+  )
+})
+
+test("ajents handle every Matrix message without requiring a command", async () => {
+  const bot = new MatrixBot(options)
+  const watcher = new Ajent({ name: "watcher" })
+  const calls: string[] = []
+
+  watcher.use(async (event, actions) => {
+    calls.push(`${event.kind}:${event.request?.body}`)
+    await actions.matrix?.replyText("seen")
+  })
+  bot.use(watcher)
+
+  const handled = await bot.dispatchAjents(
+    {
+      id: "$event",
+      kind: "matrix.message",
+      source: "matrix",
+      request: testRequest("hello without command"),
+      timestamp: new Date("2026-05-12T00:00:00.000Z"),
+    },
+    {
+      matrix: testResponse({
+        async replyText(body) {
+          calls.push(`reply:${body}`)
+        },
+      }),
+    },
+  )
+
+  expect(handled).toBe(1)
+  expect(calls).toEqual(["matrix.message:hello without command", "reply:seen"])
+})
+
+test("ajent Matrix triggers can filter by message metadata", async () => {
+  const bot = new MatrixBot(options)
+  const imageWatcher = new Ajent({
+    name: "image-watcher",
+    triggers: [{ kind: "matrix.message", messageTypes: ["image"] }],
+  })
+  const calls: string[] = []
+
+  imageWatcher.use(async (event) => {
+    calls.push(event.request?.media?.filename ?? "missing")
+  })
+  bot.use(imageWatcher)
+
+  expect(
+    await bot.dispatchAjents({
+      id: "$text",
+      kind: "matrix.message",
+      source: "matrix",
+      request: testRequest("plain"),
+      timestamp: new Date("2026-05-12T00:00:00.000Z"),
+    }),
+  ).toBe(0)
+  expect(
+    await bot.dispatchAjents({
+      id: "$image",
+      kind: "matrix.message",
+      source: "matrix",
+      request: {
+        ...testRequest("cat.png"),
+        eventId: "$image",
+        messageType: "image",
+        media: {
+          kind: "image",
+          filename: "cat.png",
+          encrypted: false,
+        },
+      },
+      timestamp: new Date("2026-05-12T00:00:00.000Z"),
+    }),
+  ).toBe(1)
+
+  expect(calls).toEqual(["cat.png"])
+})
+
+test("ajents can be activated from external sources", async () => {
+  const bot = new MatrixBot(options)
+  const stripe = new Ajent({
+    name: "stripe-fulfillment",
+    triggers: [{ kind: "external", source: "stripe", event: "payment.succeeded" }],
+  })
+  const calls: unknown[] = []
+
+  stripe.use(async (event) => {
+    calls.push(event.payload)
+  })
+  bot.use(stripe)
+
+  expect(await bot.emitExternal("github", "payment.succeeded", { id: "evt_wrong" })).toBe(0)
+  expect(await bot.emitExternal("stripe", "payment.succeeded", { id: "evt_123" })).toBe(1)
+  expect(calls).toEqual([{ id: "evt_123" }])
 })
 
 test("rejects sub-bots without commands", () => {
@@ -519,17 +635,24 @@ test("generates self-documentation from the mounted bot family", () => {
     command: ["current", "now"],
     description: "Gets current conditions.",
   })
+  const watcher = new Ajent({
+    name: "watcher",
+    description: "Looks at every message.",
+  })
 
   weather.use(current)
   bot.use(weather)
+  bot.use(watcher)
 
   const markdown = bot.generateSelfDocumentation()
 
   expect(markdown).toContain("# Matrix Bot Family Tree")
   expect(markdown).toContain("-> weather (!weather, !w)")
   expect(markdown).toContain("-> current (current, now)")
+  expect(markdown).toContain("-> watcher [ajent]")
   expect(markdown).toContain("Gets weather reports.")
   expect(markdown).toContain("Gets current conditions.")
+  expect(markdown).toContain("Looks at every message.")
 })
 
 test("writes self-documentation to a markdown file", async () => {

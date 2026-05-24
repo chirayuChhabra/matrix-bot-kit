@@ -10,9 +10,12 @@ The mental model is:
 MatrixBot
   -> SubBot      main command or feature, like !ping or !weather
       -> MicroBot optional subcommand, like current or forecast
+  -> Ajent       autonomous event-driven bot, no command required
 ```
 
 Use a `SubBot` directly for simple commands. Use `MicroBot` only when the command has subcommands.
+Use an `Ajent` when the bot should wake up from an event instead of a command: every Matrix
+message, images only, scheduled ticks, or an external event such as a Stripe webhook.
 
 ## Status
 
@@ -25,6 +28,7 @@ What works:
 - Owner-only invite acceptance.
 - Bounded sync backlog.
 - Rust-side command prefiltering before events cross into Bun.
+- Ajents for autonomous message, schedule, and external-source workflows.
 - Text, reply, media, and poll receive metadata.
 - Plain text, Markdown, media, and poll send helpers.
 - Middleware.
@@ -106,6 +110,79 @@ Bot replies:
 
 ```text
 pong
+```
+
+## Ajents
+
+Ajents are autonomous bots. They do not require a command. They are activated by events and receive
+the message content, media metadata, poll metadata, reply metadata, or external payload that caused
+the activation.
+
+```ts
+import { Ajent, MatrixBot } from "../matrix-bot-sdk/js/src/index"
+
+const bot = new MatrixBot({
+  homeserverUrl,
+  username,
+  password,
+  recoveryKey,
+})
+
+const watcher = new Ajent({
+  name: "room-watcher",
+  triggers: ["matrix.message"],
+})
+
+watcher.use(async (event, actions) => {
+  const req = event.request
+  if (!req) {
+    return
+  }
+
+  if (req.media?.kind === "image") {
+    await actions.matrix?.replyText(`I saw image ${req.media.filename}`)
+  }
+})
+
+bot.use(watcher)
+```
+
+Ajents can filter Matrix messages:
+
+```ts
+const imageIndexer = new Ajent({
+  name: "image-indexer",
+  triggers: [{ kind: "matrix.message", messageTypes: ["image"] }],
+})
+```
+
+They can also react to external sources. A web server or webhook handler can call `emitExternal`
+when something happens outside Matrix:
+
+```ts
+const fulfillment = new Ajent({
+  name: "stripe-fulfillment",
+  triggers: [{ kind: "external", source: "stripe", event: "payment.succeeded" }],
+})
+
+fulfillment.use(async (event) => {
+  console.log("paid", event.payload)
+})
+
+bot.use(fulfillment)
+
+await bot.emitExternal("stripe", "payment.succeeded", {
+  checkoutSessionId: "cs_123",
+})
+```
+
+Schedule triggers are available for repeated or one-time activation:
+
+```ts
+const dailyDigest = new Ajent({
+  name: "daily-digest",
+  triggers: [{ kind: "schedule", everyMs: 24 * 60 * 60 * 1000 }],
+})
 ```
 
 ## Runnable Example

@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{DispatchPlan, MatrixBotConfig, MatrixBotError, MatrixContext, Result, SubBot};
+use crate::{
+    Ajent, AjentDispatchPlan, DispatchPlan, MatrixBotConfig, MatrixBotError, MatrixContext, Result,
+    SubBot,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListenOptions {
@@ -22,6 +25,8 @@ pub struct MatrixBot {
     config: MatrixBotConfig,
     sub_bots: Vec<SubBot>,
     sub_bot_names: HashSet<String>,
+    ajents: Vec<Ajent>,
+    ajent_names: HashSet<String>,
 }
 
 impl MatrixBot {
@@ -31,6 +36,8 @@ impl MatrixBot {
             config,
             sub_bots: Vec::new(),
             sub_bot_names: HashSet::new(),
+            ajents: Vec::new(),
+            ajent_names: HashSet::new(),
         })
     }
 
@@ -40,6 +47,10 @@ impl MatrixBot {
 
     pub fn sub_bots(&self) -> &[SubBot] {
         &self.sub_bots
+    }
+
+    pub fn ajents(&self) -> &[Ajent] {
+        &self.ajents
     }
 
     pub fn use_sub_bot(&mut self, sub_bot: SubBot) -> Result<()> {
@@ -53,15 +64,33 @@ impl MatrixBot {
         Ok(())
     }
 
+    pub fn use_ajent(&mut self, ajent: Ajent) -> Result<()> {
+        if !self.ajent_names.insert(ajent.name().to_owned()) {
+            return Err(MatrixBotError::DuplicateAjent {
+                name: ajent.name().to_owned(),
+            });
+        }
+
+        self.ajents.push(ajent);
+        Ok(())
+    }
+
     pub fn dispatch_plan(&self, ctx: &MatrixContext) -> DispatchPlan {
         crate::dispatch::build_dispatch_plan(&self.sub_bots, ctx)
+    }
+
+    pub fn ajent_dispatch_plan(&self, ctx: &MatrixContext) -> AjentDispatchPlan {
+        crate::dispatch::build_ajent_dispatch_plan(&self.ajents, ctx)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DispatchStep, HandlerBinding, IncomingMessage, RouteLayer, RouteMatcher};
+    use crate::{
+        AjentMatrixMessageTrigger, DispatchStep, HandlerBinding, IncomingMessage, RouteLayer,
+        RouteMatcher,
+    };
 
     fn config() -> MatrixBotConfig {
         MatrixBotConfig::new(
@@ -99,6 +128,55 @@ mod tests {
                 name: "factcheck".to_owned()
             }
         );
+    }
+
+    #[test]
+    fn rejects_duplicate_ajent_names() {
+        let mut bot = MatrixBot::new(config()).unwrap();
+
+        bot.use_ajent(Ajent::new("watcher").unwrap()).unwrap();
+        let error = bot.use_ajent(Ajent::new("watcher").unwrap()).unwrap_err();
+
+        assert_eq!(
+            error,
+            MatrixBotError::DuplicateAjent {
+                name: "watcher".to_owned()
+            }
+        );
+    }
+
+    #[test]
+    fn builds_ajent_dispatch_plan_in_mount_order() {
+        let mut bot = MatrixBot::new(config()).unwrap();
+        let mut watcher = Ajent::new("watcher").unwrap();
+        let mut image_indexer = Ajent::new("image-indexer").unwrap();
+
+        watcher.on_matrix_message(AjentMatrixMessageTrigger::new(HandlerBinding::new("js")));
+        image_indexer.on_matrix_message(
+            AjentMatrixMessageTrigger::new(HandlerBinding::new("js"))
+                .with_message_types(vec!["image".to_owned()]),
+        );
+        bot.use_ajent(watcher).unwrap();
+        bot.use_ajent(image_indexer).unwrap();
+
+        let ctx = MatrixContext::new(
+            IncomingMessage::new(
+                "$event",
+                "!room:example.org",
+                "@user:example.org",
+                "hello",
+            ),
+            "@bot:example.org",
+        );
+        let plan = bot.ajent_dispatch_plan(&ctx);
+
+        let mounted_names = plan
+            .ajents()
+            .iter()
+            .map(|route| route.ajent_name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(mounted_names, vec!["watcher"]);
     }
 
     #[test]

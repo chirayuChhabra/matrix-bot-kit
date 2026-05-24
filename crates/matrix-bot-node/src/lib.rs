@@ -1,8 +1,8 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use matrix_bot_core::{
-    HandlerBinding, IncomingMessage, MatrixBotConfig, MatrixContext, ReplyTarget, RouteLayer,
-    RouteMatcher, SubBot as CoreSubBot,
+    Ajent as CoreAjent, AjentMatrixMessageTrigger, HandlerBinding, IncomingMessage,
+    MatrixBotConfig, MatrixContext, ReplyTarget, RouteLayer, RouteMatcher, SubBot as CoreSubBot,
 };
 use matrix_bot_runtime::{
     MatrixRuntime, MediaAttachment, MediaAttachmentKind, Poll, PollOption, SyncLoopOptions,
@@ -56,6 +56,11 @@ pub struct MatrixBotOptions {
 pub struct NativeListenOptions {
     pub owners: Vec<String>,
     pub timeline_limit: Option<u32>,
+}
+
+#[napi(object)]
+pub struct NativeAjentMatrixMessageTrigger {
+    pub message_types: Option<Vec<String>>,
 }
 
 #[napi(object)]
@@ -164,9 +169,21 @@ impl MatrixBot {
             .map_err(to_napi_error)
     }
 
+    #[napi]
+    pub fn register_ajent(&mut self, ajent: &Ajent) -> Result<()> {
+        self.inner
+            .use_ajent(ajent.inner.clone())
+            .map_err(to_napi_error)
+    }
+
     #[napi(getter)]
     pub fn sub_bot_count(&self) -> u32 {
         self.inner.sub_bots().len() as u32
+    }
+
+    #[napi(getter)]
+    pub fn ajent_count(&self) -> u32 {
+        self.inner.ajents().len() as u32
     }
 
     #[napi]
@@ -200,6 +217,7 @@ impl MatrixBot {
         let sync_options = SyncLoopOptions::new(timeline_limit).map_err(to_napi_error)?;
         let stored_client = self.client.clone();
         let sub_bots = Arc::new(self.inner.sub_bots().to_vec());
+        let ajents = Arc::new(self.inner.ajents().to_vec());
 
         std::thread::spawn(move || {
             let logger_for_thread = logger.clone();
@@ -238,7 +256,7 @@ impl MatrixBot {
 
                 emit_runtime_log(&logger, "info", "Matrix bot connected");
                 register_invite_handler(client.clone(), owners.clone(), logger.clone());
-                register_event_handlers(client.clone(), sub_bots, callback, logger.clone());
+                register_event_handlers(client.clone(), sub_bots, ajents, callback, logger.clone());
 
                 let mut next_batch = match runtime.sync_once(None, &sync_options).await {
                     Ok(next_batch) => next_batch,
@@ -435,6 +453,39 @@ impl SubBot {
     }
 }
 
+#[napi]
+pub struct Ajent {
+    inner: CoreAjent,
+}
+
+#[napi]
+impl Ajent {
+    #[napi(constructor)]
+    pub fn new(
+        name: String,
+        matrix_message_triggers: Option<Vec<NativeAjentMatrixMessageTrigger>>,
+    ) -> Result<Self> {
+        let mut inner = CoreAjent::new(name).map_err(to_napi_error)?;
+        if let Some(triggers) = matrix_message_triggers {
+            for trigger in triggers {
+                let mut matrix_trigger =
+                    AjentMatrixMessageTrigger::new(HandlerBinding::new("js"));
+                if let Some(message_types) = trigger.message_types {
+                    matrix_trigger = matrix_trigger.with_message_types(message_types);
+                }
+                inner.on_matrix_message(matrix_trigger);
+            }
+        }
+
+        Ok(Self { inner })
+    }
+
+    #[napi(getter)]
+    pub fn name(&self) -> String {
+        self.inner.name().to_owned()
+    }
+}
+
 fn to_napi_error(error: impl std::fmt::Display) -> Error {
     Error::from_reason(error.to_string())
 }
@@ -494,27 +545,31 @@ fn register_invite_handler(client: Client, owners: Arc<Vec<String>>, logger: Run
 fn register_event_handlers(
     client: Client,
     sub_bots: Arc<Vec<CoreSubBot>>,
+    ajents: Arc<Vec<CoreAjent>>,
     callback: Arc<MessageCallback>,
     logger: RuntimeLogger,
 ) {
     register_message_handler(
         client.clone(),
         sub_bots.clone(),
+        ajents.clone(),
         callback.clone(),
         logger.clone(),
     );
     register_poll_handler(
         client.clone(),
         sub_bots.clone(),
+        ajents.clone(),
         callback.clone(),
         logger.clone(),
     );
-    register_unstable_poll_handler(client, sub_bots, callback, logger);
+    register_unstable_poll_handler(client, sub_bots, ajents, callback, logger);
 }
 
 fn register_message_handler(
     client: Client,
     sub_bots: Arc<Vec<CoreSubBot>>,
+    ajents: Arc<Vec<CoreAjent>>,
     callback: Arc<MessageCallback>,
     logger: RuntimeLogger,
 ) {
@@ -538,7 +593,7 @@ fn register_message_handler(
                             .expect("logged in client")
                             .as_str()
                             .to_owned();
-                        if should_skip_js_dispatch(&sub_bots, &message, bot_user_id) {
+                        if should_skip_js_dispatch(&sub_bots, &ajents, &message, bot_user_id) {
                             return;
                         }
 
@@ -559,6 +614,7 @@ fn register_message_handler(
 fn register_poll_handler(
     client: Client,
     sub_bots: Arc<Vec<CoreSubBot>>,
+    ajents: Arc<Vec<CoreAjent>>,
     callback: Arc<MessageCallback>,
     logger: RuntimeLogger,
 ) {
@@ -581,7 +637,7 @@ fn register_poll_handler(
                     .expect("logged in client")
                     .as_str()
                     .to_owned();
-                if should_skip_js_dispatch(&sub_bots, &message, bot_user_id) {
+                if should_skip_js_dispatch(&sub_bots, &ajents, &message, bot_user_id) {
                     return;
                 }
 
@@ -595,6 +651,7 @@ fn register_poll_handler(
 fn register_unstable_poll_handler(
     client: Client,
     sub_bots: Arc<Vec<CoreSubBot>>,
+    ajents: Arc<Vec<CoreAjent>>,
     callback: Arc<MessageCallback>,
     logger: RuntimeLogger,
 ) {
@@ -617,7 +674,7 @@ fn register_unstable_poll_handler(
                         .expect("logged in client")
                         .as_str()
                         .to_owned();
-                    if should_skip_js_dispatch(&sub_bots, &message, bot_user_id) {
+                    if should_skip_js_dispatch(&sub_bots, &ajents, &message, bot_user_id) {
                         return;
                     }
 
@@ -639,11 +696,13 @@ fn owned_event_id(event_id: String) -> Result<OwnedEventId> {
 
 fn should_skip_js_dispatch(
     sub_bots: &[CoreSubBot],
+    ajents: &[CoreAjent],
     message: &IncomingMessage,
     bot_user_id: String,
 ) -> bool {
     let context = MatrixContext::new(message.clone(), bot_user_id);
     matrix_bot_core::build_dispatch_plan(sub_bots, &context).is_empty()
+        && matrix_bot_core::build_ajent_dispatch_plan(ajents, &context).is_empty()
 }
 
 impl From<IncomingMessage> for NativeIncomingMessage {

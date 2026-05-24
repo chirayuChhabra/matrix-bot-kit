@@ -5,6 +5,8 @@ pub enum MatrixBotError {
     MissingField { field: &'static str },
 
     DuplicateSubBot { name: String },
+
+    DuplicateAjent { name: String },
 }
 
 impl std::fmt::Display for MatrixBotError {
@@ -13,6 +15,9 @@ impl std::fmt::Display for MatrixBotError {
             Self::MissingField { field } => write!(formatter, "{field} is required"),
             Self::DuplicateSubBot { name } => {
                 write!(formatter, "a sub-bot named `{name}` is already registered")
+            }
+            Self::DuplicateAjent { name } => {
+                write!(formatter, "an ajent named `{name}` is already registered")
             }
         }
     }

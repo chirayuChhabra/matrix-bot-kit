@@ -1,4 +1,4 @@
-use crate::{HandlerBinding, MatrixContext, RouteLayer, SubBot};
+use crate::{Ajent, HandlerBinding, MatrixContext, RouteLayer, SubBot};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DispatchPlan {
@@ -48,6 +48,31 @@ pub enum DispatchStep {
     Handler(HandlerBinding),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AjentDispatchPlan {
+    ajents: Vec<AjentDispatchRoute>,
+}
+
+impl AjentDispatchPlan {
+    pub fn new(ajents: Vec<AjentDispatchRoute>) -> Self {
+        Self { ajents }
+    }
+
+    pub fn ajents(&self) -> &[AjentDispatchRoute] {
+        &self.ajents
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ajents.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AjentDispatchRoute {
+    pub ajent_name: String,
+    pub handler: HandlerBinding,
+}
+
 pub fn build_dispatch_plan<'a>(
     sub_bots: impl IntoIterator<Item = &'a SubBot>,
     ctx: &MatrixContext,
@@ -62,6 +87,32 @@ pub fn build_dispatch_plan<'a>(
         .collect();
 
     DispatchPlan::new(routes)
+}
+
+pub fn build_ajent_dispatch_plan<'a>(
+    ajents: impl IntoIterator<Item = &'a Ajent>,
+    ctx: &MatrixContext,
+) -> AjentDispatchPlan {
+    let routes = ajents
+        .into_iter()
+        .flat_map(|ajent| {
+            ajent
+                .triggers()
+                .iter()
+                .filter(|trigger| trigger.matches_matrix_message(ctx))
+                .map(|trigger| {
+                    let handler = match trigger {
+                        crate::AjentTrigger::MatrixMessage(trigger) => trigger.handler().clone(),
+                    };
+                    AjentDispatchRoute {
+                        ajent_name: ajent.name().to_owned(),
+                        handler,
+                    }
+                })
+        })
+        .collect();
+
+    AjentDispatchPlan::new(routes)
 }
 
 #[cfg(test)]
@@ -103,6 +154,37 @@ mod tests {
                     DispatchStep::Middleware(HandlerBinding::new("typing_notice")),
                     DispatchStep::Handler(HandlerBinding::new("factcheck_handler")),
                 ],
+            }]
+        );
+    }
+
+    #[test]
+    fn builds_ajent_dispatch_plan_for_matching_matrix_message_triggers() {
+        let mut all_messages = Ajent::new("all-messages").unwrap();
+        let mut images = Ajent::new("images").unwrap();
+        all_messages
+            .on_matrix_message(crate::AjentMatrixMessageTrigger::new(HandlerBinding::new("js")));
+        images.on_matrix_message(
+            crate::AjentMatrixMessageTrigger::new(HandlerBinding::new("js"))
+                .with_message_types(vec!["image".to_owned()]),
+        );
+
+        let ctx = MatrixContext::new(
+            IncomingMessage::new(
+                "$event",
+                "!room:example.org",
+                "@user:example.org",
+                "hello",
+            ),
+            "@bot:example.org",
+        );
+        let plan = build_ajent_dispatch_plan([&all_messages, &images], &ctx);
+
+        assert_eq!(
+            plan.ajents(),
+            &[AjentDispatchRoute {
+                ajent_name: "all-messages".to_owned(),
+                handler: HandlerBinding::new("js"),
             }]
         );
     }
