@@ -1,12 +1,12 @@
 use crate::{MatrixBotError, MatrixContext, Result, RouteLayer};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubBot {
+pub struct CommandGroup {
     name: String,
     routes: Vec<RouteLayer>,
 }
 
-impl SubBot {
+impl CommandGroup {
     pub fn new(name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         if name.trim().is_empty() {
@@ -46,20 +46,20 @@ mod tests {
 
     #[test]
     fn requires_name() {
-        let error = SubBot::new(" ").unwrap_err();
+        let error = CommandGroup::new(" ").unwrap_err();
 
         assert_eq!(error, MatrixBotError::MissingField { field: "name" });
     }
 
     #[test]
     fn keeps_routes_in_registration_order() {
-        let mut sub_bot = SubBot::new("factcheck").unwrap();
+        let mut command_group = CommandGroup::new("factcheck").unwrap();
 
-        sub_bot.use_route(RouteLayer::new(
+        command_group.use_route(RouteLayer::new(
             RouteMatcher::prefix("!check"),
             HandlerBinding::new("factcheck"),
         ));
-        sub_bot.use_route(RouteLayer::new(
+        command_group.use_route(RouteLayer::new(
             RouteMatcher::ReplyToBot,
             HandlerBinding::new("followup"),
         ));
@@ -73,7 +73,7 @@ mod tests {
             ),
             "@bot:example.org",
         );
-        let handlers = sub_bot
+        let handlers = command_group
             .matching_routes(&ctx)
             .map(|route| route.handler.name())
             .collect::<Vec<_>>();

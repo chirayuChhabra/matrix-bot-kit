@@ -4,20 +4,20 @@ pub type Result<T> = std::result::Result<T, MatrixBotError>;
 pub enum MatrixBotError {
     MissingField { field: &'static str },
 
-    DuplicateSubBot { name: String },
+    DuplicateCommandGroup { name: String },
 
-    DuplicateAjent { name: String },
+    DuplicateListener { name: String },
 }
 
 impl std::fmt::Display for MatrixBotError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MissingField { field } => write!(formatter, "{field} is required"),
-            Self::DuplicateSubBot { name } => {
+            Self::DuplicateCommandGroup { name } => {
                 write!(formatter, "a sub-bot named `{name}` is already registered")
             }
-            Self::DuplicateAjent { name } => {
-                write!(formatter, "an ajent named `{name}` is already registered")
+            Self::DuplicateListener { name } => {
+                write!(formatter, "an listener named `{name}` is already registered")
             }
         }
     }

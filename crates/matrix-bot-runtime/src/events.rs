@@ -40,7 +40,8 @@ pub async fn incoming_message_from_room_event(
         event.sender.to_string(),
         body,
     )
-    .with_message_type(message_type);
+    .with_message_type(message_type)
+    .with_is_direct(room.is_direct().await.unwrap_or(false));
 
     if let Some(media) = media {
         message = message.with_media(media);

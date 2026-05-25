@@ -1,12 +1,12 @@
 use crate::{HandlerBinding, MatrixBotError, MatrixContext, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Ajent {
+pub struct Listener {
     name: String,
-    triggers: Vec<AjentTrigger>,
+    triggers: Vec<ListenerTrigger>,
 }
 
-impl Ajent {
+impl Listener {
     pub fn new(name: impl Into<String>) -> Result<Self> {
         let name = name.into();
         if name.trim().is_empty() {
@@ -23,12 +23,12 @@ impl Ajent {
         &self.name
     }
 
-    pub fn triggers(&self) -> &[AjentTrigger] {
+    pub fn triggers(&self) -> &[ListenerTrigger] {
         &self.triggers
     }
 
-    pub fn on_matrix_message(&mut self, trigger: AjentMatrixMessageTrigger) {
-        self.triggers.push(AjentTrigger::MatrixMessage(trigger));
+    pub fn on_matrix_message(&mut self, trigger: ListenerMatrixMessageTrigger) {
+        self.triggers.push(ListenerTrigger::MatrixMessage(trigger));
     }
 
     pub fn matches_matrix_message(&self, ctx: &MatrixContext) -> bool {
@@ -39,11 +39,11 @@ impl Ajent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AjentTrigger {
-    MatrixMessage(AjentMatrixMessageTrigger),
+pub enum ListenerTrigger {
+    MatrixMessage(ListenerMatrixMessageTrigger),
 }
 
-impl AjentTrigger {
+impl ListenerTrigger {
     pub fn matches_matrix_message(&self, ctx: &MatrixContext) -> bool {
         match self {
             Self::MatrixMessage(trigger) => trigger.matches(ctx),
@@ -52,12 +52,12 @@ impl AjentTrigger {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AjentMatrixMessageTrigger {
+pub struct ListenerMatrixMessageTrigger {
     message_types: Vec<String>,
     handler: HandlerBinding,
 }
 
-impl AjentMatrixMessageTrigger {
+impl ListenerMatrixMessageTrigger {
     pub fn new(handler: HandlerBinding) -> Self {
         Self {
             message_types: Vec::new(),
@@ -106,29 +106,29 @@ mod tests {
 
     #[test]
     fn requires_name() {
-        let error = Ajent::new(" ").unwrap_err();
+        let error = Listener::new(" ").unwrap_err();
 
         assert_eq!(error, MatrixBotError::MissingField { field: "name" });
     }
 
     #[test]
     fn matrix_message_trigger_matches_all_message_types_by_default() {
-        let mut ajent = Ajent::new("watcher").unwrap();
-        ajent.on_matrix_message(AjentMatrixMessageTrigger::new(HandlerBinding::new("js")));
+        let mut listener = Listener::new("watcher").unwrap();
+        listener.on_matrix_message(ListenerMatrixMessageTrigger::new(HandlerBinding::new("js")));
 
-        assert!(ajent.matches_matrix_message(&ctx("text")));
-        assert!(ajent.matches_matrix_message(&ctx("image")));
+        assert!(listener.matches_matrix_message(&ctx("text")));
+        assert!(listener.matches_matrix_message(&ctx("image")));
     }
 
     #[test]
     fn matrix_message_trigger_can_filter_by_message_type() {
-        let mut ajent = Ajent::new("image-indexer").unwrap();
-        ajent.on_matrix_message(
-            AjentMatrixMessageTrigger::new(HandlerBinding::new("js"))
+        let mut listener = Listener::new("image-indexer").unwrap();
+        listener.on_matrix_message(
+            ListenerMatrixMessageTrigger::new(HandlerBinding::new("js"))
                 .with_message_types(vec!["image".to_owned()]),
         );
 
-        assert!(ajent.matches_matrix_message(&ctx("image")));
-        assert!(!ajent.matches_matrix_message(&ctx("text")));
+        assert!(listener.matches_matrix_message(&ctx("image")));
+        assert!(!listener.matches_matrix_message(&ctx("text")));
     }
 }

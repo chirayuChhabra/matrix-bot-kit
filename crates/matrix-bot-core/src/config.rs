@@ -9,6 +9,9 @@ pub struct MatrixBotConfig {
     pub password: String,
     pub recovery_key: String,
     pub data_dir: PathBuf,
+    pub admin: Vec<String>,
+    pub moderator: Vec<String>,
+    pub timeline_limit: u32,
 }
 
 impl MatrixBotConfig {
@@ -17,6 +20,9 @@ impl MatrixBotConfig {
         username: impl Into<String>,
         password: impl Into<String>,
         recovery_key: impl Into<String>,
+        admin: Vec<String>,
+        moderator: Vec<String>,
+        timeline_limit: u32,
     ) -> Result<Self> {
         let config = Self {
             homeserver_url: homeserver_url.into(),
@@ -24,9 +30,20 @@ impl MatrixBotConfig {
             password: password.into(),
             recovery_key: recovery_key.into(),
             data_dir: PathBuf::from(".matrix-bot-sdk"),
+            admin,
+            moderator,
+            timeline_limit,
         };
         config.validate()?;
         Ok(config)
+    }
+
+    pub fn is_admin(&self, user_id: &str) -> bool {
+        self.admin.iter().any(|a| a == user_id)
+    }
+
+    pub fn is_moderator(&self, user_id: &str) -> bool {
+        self.is_admin(user_id) || self.moderator.iter().any(|m| m == user_id)
     }
 
     pub fn with_data_dir(mut self, data_dir: impl Into<PathBuf>) -> Result<Self> {
@@ -57,7 +74,7 @@ mod tests {
 
     #[test]
     fn rejects_empty_required_fields() {
-        let error = MatrixBotConfig::new("", "@bot:example.org", "secret", "recovery").unwrap_err();
+        let error = MatrixBotConfig::new("", "@bot:example.org", "secret", "recovery", vec![], vec![], 20).unwrap_err();
 
         assert_eq!(
             error,
@@ -74,6 +91,9 @@ mod tests {
             "@bot:example.org",
             "secret",
             "recovery",
+            vec![],
+            vec![],
+            20,
         )
         .unwrap();
 

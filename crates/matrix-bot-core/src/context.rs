@@ -8,6 +8,7 @@ pub struct IncomingMessage {
     pub media: Option<MediaMessage>,
     pub poll: Option<PollMessage>,
     pub reply_target: ReplyTarget,
+    pub is_direct: bool,
 }
 
 impl IncomingMessage {
@@ -26,11 +27,17 @@ impl IncomingMessage {
             media: None,
             poll: None,
             reply_target: ReplyTarget::NoReply,
+            is_direct: false,
         }
     }
 
     pub fn with_message_type(mut self, message_type: impl Into<String>) -> Self {
         self.message_type = message_type.into();
+        self
+    }
+
+    pub fn with_is_direct(mut self, is_direct: bool) -> Self {
+        self.is_direct = is_direct;
         self
     }
 

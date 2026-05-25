@@ -1,32 +1,17 @@
 use std::collections::HashSet;
 
 use crate::{
-    Ajent, AjentDispatchPlan, DispatchPlan, MatrixBotConfig, MatrixBotError, MatrixContext, Result,
-    SubBot,
+    Listener, ListenerDispatchPlan, DispatchPlan, MatrixBotConfig, MatrixBotError, MatrixContext, Result,
+    CommandGroup,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ListenOptions {
-    pub owners: Vec<String>,
-}
-
-impl ListenOptions {
-    pub fn new(owners: Vec<String>) -> Result<Self> {
-        if owners.iter().all(|owner| owner.trim().is_empty()) {
-            return Err(MatrixBotError::MissingField { field: "owners" });
-        }
-
-        Ok(Self { owners })
-    }
-}
 
 #[derive(Debug)]
 pub struct MatrixBot {
     config: MatrixBotConfig,
-    sub_bots: Vec<SubBot>,
-    sub_bot_names: HashSet<String>,
-    ajents: Vec<Ajent>,
-    ajent_names: HashSet<String>,
+    command_groups: Vec<CommandGroup>,
+    command_group_names: HashSet<String>,
+    listeners: Vec<Listener>,
+    listener_names: HashSet<String>,
 }
 
 impl MatrixBot {
@@ -34,10 +19,10 @@ impl MatrixBot {
         config.validate()?;
         Ok(Self {
             config,
-            sub_bots: Vec::new(),
-            sub_bot_names: HashSet::new(),
-            ajents: Vec::new(),
-            ajent_names: HashSet::new(),
+            command_groups: Vec::new(),
+            command_group_names: HashSet::new(),
+            listeners: Vec::new(),
+            listener_names: HashSet::new(),
         })
     }
 
@@ -45,42 +30,42 @@ impl MatrixBot {
         &self.config
     }
 
-    pub fn sub_bots(&self) -> &[SubBot] {
-        &self.sub_bots
+    pub fn command_groups(&self) -> &[CommandGroup] {
+        &self.command_groups
     }
 
-    pub fn ajents(&self) -> &[Ajent] {
-        &self.ajents
+    pub fn listeners(&self) -> &[Listener] {
+        &self.listeners
     }
 
-    pub fn use_sub_bot(&mut self, sub_bot: SubBot) -> Result<()> {
-        if !self.sub_bot_names.insert(sub_bot.name().to_owned()) {
-            return Err(MatrixBotError::DuplicateSubBot {
-                name: sub_bot.name().to_owned(),
+    pub fn use_command_group(&mut self, command_group: CommandGroup) -> Result<()> {
+        if !self.command_group_names.insert(command_group.name().to_owned()) {
+            return Err(MatrixBotError::DuplicateCommandGroup {
+                name: command_group.name().to_owned(),
             });
         }
 
-        self.sub_bots.push(sub_bot);
+        self.command_groups.push(command_group);
         Ok(())
     }
 
-    pub fn use_ajent(&mut self, ajent: Ajent) -> Result<()> {
-        if !self.ajent_names.insert(ajent.name().to_owned()) {
-            return Err(MatrixBotError::DuplicateAjent {
-                name: ajent.name().to_owned(),
+    pub fn use_listener(&mut self, listener: Listener) -> Result<()> {
+        if !self.listener_names.insert(listener.name().to_owned()) {
+            return Err(MatrixBotError::DuplicateListener {
+                name: listener.name().to_owned(),
             });
         }
 
-        self.ajents.push(ajent);
+        self.listeners.push(listener);
         Ok(())
     }
 
     pub fn dispatch_plan(&self, ctx: &MatrixContext) -> DispatchPlan {
-        crate::dispatch::build_dispatch_plan(&self.sub_bots, ctx)
+        crate::dispatch::build_dispatch_plan(&self.command_groups, ctx)
     }
 
-    pub fn ajent_dispatch_plan(&self, ctx: &MatrixContext) -> AjentDispatchPlan {
-        crate::dispatch::build_ajent_dispatch_plan(&self.ajents, ctx)
+    pub fn listener_dispatch_plan(&self, ctx: &MatrixContext) -> ListenerDispatchPlan {
+        crate::dispatch::build_listener_dispatch_plan(&self.listeners, ctx)
     }
 }
 
@@ -88,7 +73,7 @@ impl MatrixBot {
 mod tests {
     use super::*;
     use crate::{
-        AjentMatrixMessageTrigger, DispatchStep, HandlerBinding, IncomingMessage, RouteLayer,
+        ListenerMatrixMessageTrigger, DispatchStep, HandlerBinding, IncomingMessage, RouteLayer,
         RouteMatcher,
     };
 
@@ -98,66 +83,69 @@ mod tests {
             "@bot:example.org",
             "secret",
             "recovery",
+            vec![],
+            vec![],
+            20,
         )
         .unwrap()
     }
 
     #[test]
-    fn registers_sub_bots_in_order() {
+    fn registers_command_groups_in_order() {
         let mut bot = MatrixBot::new(config()).unwrap();
 
-        bot.use_sub_bot(SubBot::new("factcheck").unwrap()).unwrap();
-        bot.use_sub_bot(SubBot::new("imdb").unwrap()).unwrap();
+        bot.use_command_group(CommandGroup::new("factcheck").unwrap()).unwrap();
+        bot.use_command_group(CommandGroup::new("imdb").unwrap()).unwrap();
 
-        let names = bot.sub_bots().iter().map(SubBot::name).collect::<Vec<_>>();
+        let names = bot.command_groups().iter().map(CommandGroup::name).collect::<Vec<_>>();
         assert_eq!(names, vec!["factcheck", "imdb"]);
     }
 
     #[test]
-    fn rejects_duplicate_sub_bot_names() {
+    fn rejects_duplicate_command_group_names() {
         let mut bot = MatrixBot::new(config()).unwrap();
 
-        bot.use_sub_bot(SubBot::new("factcheck").unwrap()).unwrap();
+        bot.use_command_group(CommandGroup::new("factcheck").unwrap()).unwrap();
         let error = bot
-            .use_sub_bot(SubBot::new("factcheck").unwrap())
+            .use_command_group(CommandGroup::new("factcheck").unwrap())
             .unwrap_err();
 
         assert_eq!(
             error,
-            MatrixBotError::DuplicateSubBot {
+            MatrixBotError::DuplicateCommandGroup {
                 name: "factcheck".to_owned()
             }
         );
     }
 
     #[test]
-    fn rejects_duplicate_ajent_names() {
+    fn rejects_duplicate_listener_names() {
         let mut bot = MatrixBot::new(config()).unwrap();
 
-        bot.use_ajent(Ajent::new("watcher").unwrap()).unwrap();
-        let error = bot.use_ajent(Ajent::new("watcher").unwrap()).unwrap_err();
+        bot.use_listener(Listener::new("watcher").unwrap()).unwrap();
+        let error = bot.use_listener(Listener::new("watcher").unwrap()).unwrap_err();
 
         assert_eq!(
             error,
-            MatrixBotError::DuplicateAjent {
+            MatrixBotError::DuplicateListener {
                 name: "watcher".to_owned()
             }
         );
     }
 
     #[test]
-    fn builds_ajent_dispatch_plan_in_mount_order() {
+    fn builds_listener_dispatch_plan_in_mount_order() {
         let mut bot = MatrixBot::new(config()).unwrap();
-        let mut watcher = Ajent::new("watcher").unwrap();
-        let mut image_indexer = Ajent::new("image-indexer").unwrap();
+        let mut watcher = Listener::new("watcher").unwrap();
+        let mut image_indexer = Listener::new("image-indexer").unwrap();
 
-        watcher.on_matrix_message(AjentMatrixMessageTrigger::new(HandlerBinding::new("js")));
+        watcher.on_matrix_message(ListenerMatrixMessageTrigger::new(HandlerBinding::new("js")));
         image_indexer.on_matrix_message(
-            AjentMatrixMessageTrigger::new(HandlerBinding::new("js"))
+            ListenerMatrixMessageTrigger::new(HandlerBinding::new("js"))
                 .with_message_types(vec!["image".to_owned()]),
         );
-        bot.use_ajent(watcher).unwrap();
-        bot.use_ajent(image_indexer).unwrap();
+        bot.use_listener(watcher).unwrap();
+        bot.use_listener(image_indexer).unwrap();
 
         let ctx = MatrixContext::new(
             IncomingMessage::new(
@@ -168,22 +156,22 @@ mod tests {
             ),
             "@bot:example.org",
         );
-        let plan = bot.ajent_dispatch_plan(&ctx);
+        let plan = bot.listener_dispatch_plan(&ctx);
 
         let mounted_names = plan
-            .ajents()
+            .listeners()
             .iter()
-            .map(|route| route.ajent_name.as_str())
+            .map(|route| route.listener_name.as_str())
             .collect::<Vec<_>>();
 
         assert_eq!(mounted_names, vec!["watcher"]);
     }
 
     #[test]
-    fn builds_dispatch_plan_across_sub_bots_in_mount_order() {
+    fn builds_dispatch_plan_across_command_groups_in_mount_order() {
         let mut bot = MatrixBot::new(config()).unwrap();
-        let mut factcheck = SubBot::new("factcheck").unwrap();
-        let mut imdb = SubBot::new("imdb").unwrap();
+        let mut factcheck = CommandGroup::new("factcheck").unwrap();
+        let mut imdb = CommandGroup::new("imdb").unwrap();
 
         factcheck.use_route(RouteLayer::new(
             RouteMatcher::prefix("!"),
@@ -193,8 +181,8 @@ mod tests {
             RouteMatcher::prefix("!"),
             HandlerBinding::new("imdb_handler"),
         ));
-        bot.use_sub_bot(factcheck).unwrap();
-        bot.use_sub_bot(imdb).unwrap();
+        bot.use_command_group(factcheck).unwrap();
+        bot.use_command_group(imdb).unwrap();
 
         let ctx = MatrixContext::new(
             IncomingMessage::new(
@@ -210,7 +198,7 @@ mod tests {
         let mounted_names = plan
             .routes()
             .iter()
-            .map(|route| route.sub_bot_name.as_str())
+            .map(|route| route.command_group_name.as_str())
             .collect::<Vec<_>>();
         let handlers = plan
             .routes()

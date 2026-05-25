@@ -2,7 +2,6 @@ import { createRequire } from "node:module"
 
 type NativeMatrixBot = {
   start(
-    options: NativeListenOptions,
     onMessage: (message: NativeIncomingMessage) => void,
     onLog: (event: NativeRuntimeLog) => void,
   ): void
@@ -15,27 +14,22 @@ type NativeMatrixBot = {
   replyText(roomId: string, eventId: string, body: string): Promise<void>
   replyMarkdown(roomId: string, eventId: string, body: string): Promise<void>
   downloadMedia(roomId: string, eventId: string): Promise<Buffer>
-  registerSubBot(subBot: NativeSubBot): void
-  registerAjent?(ajent: NativeAjent): void
-  subBotCount: number
-  ajentCount: number
+  registerCommandGroup(commandGroup: NativeCommandGroup): void
+  registerListener?(listener: NativeListener): void
+  commandGroupCount: number
+  listenerCount: number
 }
 
-type NativeSubBot = {
+type NativeCommandGroup = {
   name: string
 }
 
-type NativeAjent = {
+type NativeListener = {
   name: string
 }
 
-export type NativeAjentMatrixMessageTrigger = {
+export type NativeListenerMatrixMessageTrigger = {
   messageTypes?: MatrixMessageType[]
-}
-
-export type NativeListenOptions = {
-  owners: string[]
-  timelineLimit?: number
 }
 
 export type NativeIncomingMessage = {
@@ -54,6 +48,7 @@ export type NativeIncomingMessage = {
     media?: NativeMediaMessage
   }
   replyUnsupported: boolean
+  is_direct: boolean
 }
 
 export type NativeRuntimeLog = {
@@ -113,12 +108,15 @@ export type NativeBinding = {
     password: string
     recoveryKey: string
     dataDir?: string
+    admin?: string[]
+    moderator?: string[]
+    timeline_limit?: number
   }) => NativeMatrixBot
-  SubBot: new (name: string, commands?: string[]) => NativeSubBot
-  Ajent?: new (
+  CommandGroup: new (name: string, commands?: string[]) => NativeCommandGroup
+  Listener?: new (
     name: string,
-    matrixMessageTriggers?: NativeAjentMatrixMessageTrigger[],
-  ) => NativeAjent
+    matrixMessageTriggers?: NativeListenerMatrixMessageTrigger[],
+  ) => NativeListener
 }
 
 export function loadNativeBinding(): NativeBinding | undefined {

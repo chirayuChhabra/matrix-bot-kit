@@ -1,676 +1,318 @@
-# matrix-bot-sdk
+# 🤖 Matrix Bot SDK
 
-Rust runtime, Bun/TypeScript bot logic.
+> **Build high-performance, resilient Matrix bots with ease.**
 
-This SDK is for building Matrix bots without writing Matrix sync, login, E2EE, invite handling, replies, uploads, or polling code yourself. Rust owns the Matrix runtime. TypeScript owns your bot behavior.
+The **Matrix Bot SDK** combines the rock-solid reliability of a **Rust runtime** with the flexibility and expressiveness of **Bun/TypeScript**. 
 
-The mental model is:
+You focus on your bot's behavior in TypeScript, while the Rust backend seamlessly handles the heavy lifting: Matrix syncing, secure logins, End-to-End Encryption (E2EE), invite handling, message parsing, and polling.
+
+---
+
+## ✨ Features
+
+- **Hybrid Architecture:** Rust handles Matrix syncing, crypto, and connection pooling; TypeScript handles the logic.
+- **E2EE First:** Native support for end-to-end encryption with recovery keys.
+- **Advanced Routing:** Robust routing for commands, sub-commands, and middleware.
+- **Autonomous Listeners:** Schedule tasks, handle webhooks, or process all incoming events automatically.
+- **Rich Media & Polls:** Helpers for sending/receiving images, files, videos, and polls.
+- **Utility Commands:** Built-in maintainer commands (`!ping`, `!status`, `!maintenance`) out of the box.
+- **Self-Documenting:** Automatically generate a Markdown family tree of your bot's capabilities.
+- **Zero-Boilerplate Errors:** Global error hooks for easy operational monitoring.
+
+---
+
+## 🧠 Mental Model
+
+The SDK is organized hierarchically. You instantiate a `MatrixBot`, attach `CommandGroup`s or `Listener`s, and mount `Command`s.
 
 ```text
 MatrixBot
-  -> SubBot      main command or feature, like !ping or !weather
-      -> MicroBot optional subcommand, like current or forecast
-  -> Ajent       autonomous event-driven bot, no command required
+  ├── CommandGroup (e.g., `!weather`)
+  │    └── Command (e.g., `current`, `forecast`)
+  ├── Command      (e.g., `!ping` - simple top-level command)
+  └── Listener     (Autonomous event-driven bot, no command prefix required)
 ```
 
-Use a `SubBot` directly for simple commands. Use `MicroBot` only when the command has subcommands.
-Use an `Ajent` when the bot should wake up from an event instead of a command: every Matrix
-message, images only, scheduled ticks, or an external event such as a Stripe webhook.
+- **Commands** (`bot.command`, `bot.group`): Triggered by specific prefixes or text patterns.
+- **Listeners** (`bot.on`, `bot.schedule`, `bot.webhook`): Wake up based on events—every Matrix message, image uploads, scheduled cron ticks, or external webhooks (e.g., Stripe).
 
-## Status
+---
 
-This repository is usable locally, but it is not packaged for npm yet.
+## 🚀 Getting Started
 
-What works:
+### Prerequisites
+- [Bun](https://bun.sh/)
+- [Rust & Cargo](https://rustup.rs/) (to build the native backend)
 
-- Matrix login and session restore.
-- E2EE recovery with a recovery key.
-- Owner-only invite acceptance.
-- Bounded sync backlog.
-- Rust-side command prefiltering before events cross into Bun.
-- Ajents for autonomous message, schedule, and external-source workflows.
-- Text, reply, media, and poll receive metadata.
-- Plain text, Markdown, media, and poll send helpers.
-- Middleware.
-- Structured production logging.
-- One global error hook.
+### Installation
 
-Still rough:
+1. Clone your project repository.
+2. Build the native binding:
+   ```bash
+   devbox run build-native
+   # or manually compile the crates and place the .node file at:
+   # js/native/matrix_bot_node.node
+   ```
 
-- You must build the native binding locally.
-- Import paths are local repo paths until packaging exists.
-- Admin command helpers are not built in yet.
-
-## Setup
-
-Build the native binding first:
-
-```sh
-devbox run build-native
-```
-
-That creates:
-
-```text
-js/native/matrix_bot_node.node
-```
-
-Run tests:
-
-```sh
-devbox run test
-devbox run test-js
-devbox run test-native
-```
-
-## Smallest Bot
+### Your First Bot
 
 ```ts
-import {
-  MatrixBot,
-  SubBot,
-  type MatrixRequest,
-  type MatrixResponse,
-} from "../matrix-bot-sdk/js/src/index"
+import { MatrixBot, type Context } from "../matrix-bot-sdk/js/src/index"
 
 const bot = new MatrixBot({
   homeserverUrl: "https://matrix.org",
   username: Bun.env.BOT_USERNAME!,
   password: Bun.env.BOT_PASSWORD!,
   recoveryKey: Bun.env.RECOVERY_KEY!,
+  admin: [Bun.env.MAINTAINER_ID!],
+  timelineLimit: 20,
   config: {
-    announceSubBotUsage: true,
-    selfDocumentation: true,
+    announceCommandGroupUsage: true, // Announce when a group command is used
+    utility: true, // Enable built-in utility & maintenance commands
   },
 })
 
-const ping = new SubBot({
-  name: "ping",
-  command: ["!ping", "!p"],
+// Simple ping command
+bot.command(["!ping", "!p"], async (ctx: Context) => {
+  await ctx.reply.text("pong")
 })
 
-ping.use(async (_req: MatrixRequest, res: MatrixResponse) => {
-  await res.replyText("pong")
-})
-
-bot.use(ping)
-
-await bot.listen({
-  owners: [Bun.env.MAINTAINER_ID!],
+// Start syncing
+await bot.start(() => {
+  console.log("Bot successfully started and syncing!")
 })
 ```
 
-User sends:
+---
 
-```text
-!ping
-```
+## 📚 Core Concepts
 
-Bot replies:
+### Commands & Routing
 
-```text
-pong
-```
-
-## Ajents
-
-Ajents are autonomous bots. They do not require a command. They are activated by events and receive
-the message content, media metadata, poll metadata, reply metadata, or external payload that caused
-the activation.
+A **Command Group** acts as a feature boundary. If a feature has one natural action, use `bot.command`:
 
 ```ts
-import { Ajent, MatrixBot } from "../matrix-bot-sdk/js/src/index"
-
-const bot = new MatrixBot({
-  homeserverUrl,
-  username,
-  password,
-  recoveryKey,
-})
-
-const watcher = new Ajent({
-  name: "room-watcher",
-  triggers: ["matrix.message"],
-})
-
-watcher.use(async (event, actions) => {
-  const req = event.request
-  if (!req) {
-    return
-  }
-
-  if (req.media?.kind === "image") {
-    await actions.matrix?.replyText(`I saw image ${req.media.filename}`)
-  }
-})
-
-bot.use(watcher)
-```
-
-Ajents can filter Matrix messages:
-
-```ts
-const imageIndexer = new Ajent({
-  name: "image-indexer",
-  triggers: [{ kind: "matrix.message", messageTypes: ["image"] }],
+bot.command(["!weather", "!w"], async (ctx) => {
+  await ctx.reply.text(`Weather for ${ctx.message.body}`)
 })
 ```
 
-They can also react to external sources. A web server or webhook handler can call `emitExternal`
-when something happens outside Matrix:
+If a feature has multiple sub-actions, use a group:
 
 ```ts
-const fulfillment = new Ajent({
-  name: "stripe-fulfillment",
-  triggers: [{ kind: "external", source: "stripe", event: "payment.succeeded" }],
+const weather = bot.group(["!weather", "!w"])
+
+weather.command(["current", "now"], async (ctx) => {
+  await ctx.reply.text(`Current weather for ${ctx.message.body}`)
 })
 
-fulfillment.use(async (event) => {
+weather.command("forecast", async (ctx) => {
+  await ctx.reply.text(`Weather forecast for ${ctx.message.body}`)
+})
+```
+*Note: Routing consumes tokens as it goes. For `!weather current delhi`, `ctx.message.body` resolves to just `delhi` inside the handler.*
+
+### Listeners (Event-driven)
+
+Listeners do not require a command prefix. They are activated by raw events.
+
+**Matrix Events:**
+```ts
+bot.on("image", async (ctx) => {
+  await ctx.reply.text(`Processing your image: ${ctx.message.media?.filename}`)
+})
+```
+
+**Scheduled Tasks:**
+```ts
+bot.schedule({ everyMs: 24 * 60 * 60 * 1000 }, async (event) => {
+  console.log("Running daily digest...")
+})
+```
+
+**External Webhooks:**
+```ts
+bot.webhook("stripe", "payment.succeeded", async (event) => {
   console.log("paid", event.payload)
 })
 
-bot.use(fulfillment)
-
-await bot.emitExternal("stripe", "payment.succeeded", {
-  checkoutSessionId: "cs_123",
-})
+// Somewhere else in your API server:
+await bot.emitExternal("stripe", "payment.succeeded", { sessionId: "123" })
 ```
 
-Schedule triggers are available for repeated or one-time activation:
+### Middleware
+
+Wrap handlers to enforce global rules, like restricting commands to a specific domain:
 
 ```ts
-const dailyDigest = new Ajent({
-  name: "daily-digest",
-  triggers: [{ kind: "schedule", everyMs: 24 * 60 * 60 * 1000 }],
-})
-```
-
-## Runnable Example
-
-```sh
-export HOMESERVER_URL="https://matrix.org"
-export BOT_USERNAME="@yourbot:matrix.org"
-export BOT_PASSWORD="..."
-export RECOVERY_KEY="..."
-export BOT_OWNERS="@you:matrix.org"
-
-devbox run build-native
-devbox run example
-```
-
-The example is [examples/ping-bot.ts](examples/ping-bot.ts).
-
-## SubBot vs MicroBot
-
-A `SubBot` is the feature boundary. It owns the top-level command.
-
-```ts
-const weather = new SubBot({
-  name: "weather",
-  command: ["!weather", "!w"],
-})
-```
-
-If the feature has one natural action, put the handler directly on the `SubBot`:
-
-```ts
-weather.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  await res.replyText(`Weather for ${req.body}`)
-})
-```
-
-This handles:
-
-```text
-!weather delhi
-!w delhi
-```
-
-If the feature has multiple actions, add `MicroBot`s:
-
-```ts
-import { MicroBot, SubBot } from "../matrix-bot-sdk/js/src/index"
-
-const weather = new SubBot({
-  name: "weather",
-  command: ["!weather", "!w"],
-})
-
-const current = new MicroBot({
-  name: "current",
-  command: ["current", "now"],
-})
-
-current.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  await res.replyText(`Current weather for ${req.body}`)
-})
-
-weather.use(current)
-```
-
-This handles:
-
-```text
-!weather current delhi
-!w now delhi
-```
-
-Routing consumes commands as it goes:
-
-| Input | Handler sees `req.body` |
-| --- | --- |
-| `!weather delhi` | `delhi` |
-| `!weather current delhi` | `delhi` |
-| `!w now delhi` | `delhi` |
-
-If a `SubBot` has both microbots and its own handler, microbots win first. The `SubBot` handler becomes the fallback.
-
-```ts
-weather.use(current)
-
-weather.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  await res.replyText(`Default weather lookup for ${req.body}`)
-})
-```
-
-When `config.announceSubBotUsage` is enabled and the main bot recognizes a runnable subbot command, it immediately sends a room notice:
-
-```text
-> using weather...
-```
-
-Only the `SubBot` name is announced. Microbot names are not shown. The feature is opt-in so production bots do not add chat noise unless you ask for it.
-
-## Self Documentation
-
-The bot can document its own mounted family tree because `MatrixBot`, `SubBot`, and `MicroBot` already know their names, commands, descriptions, and mounted children.
-
-When `config.selfDocumentation` is enabled, `listen()` writes:
-
-```text
-matrix-bot-family.md
-```
-
-The file includes the main bot, every mounted subbot, every mounted microbot, commands, descriptions, categories, and a text family tree.
-
-```ts
-const bot = new MatrixBot({
-  homeserverUrl,
-  username,
-  password,
-  recoveryKey,
-  config: {
-    selfDocumentation: true,
-    documentationPath: "matrix-bot-family.md",
-  },
-})
-```
-
-The file write is opt-in so `listen()` does not create files unexpectedly. You can also generate or write the file manually:
-
-```ts
-const markdown = bot.generateSelfDocumentation()
-await bot.writeSelfDocumentation("docs/bot-family.md")
-```
-
-## Middleware
-
-Middleware wraps a handler. It receives `(req, res, next)`.
-
-```ts
-const ownerOnly = (owners: string[]) => {
-  return async (
-    req: MatrixRequest,
-    res: MatrixResponse,
-    next: () => Promise<void>,
-  ) => {
-    if (!owners.includes(req.sender)) {
-      await res.replyText("Not allowed.")
+const restrictToDomain = (domain: string) => {
+  return async (ctx: Context, next: () => Promise<void>) => {
+    if (!ctx.sender.id.endsWith(`:${domain}`)) {
+      await ctx.reply.text("Not allowed from your domain.")
       return
     }
-
     await next()
   }
 }
 
-ping.use(ownerOnly(["@you:matrix.org"]), async (
-  _req: MatrixRequest,
-  res: MatrixResponse,
-) => {
-  await res.replyText("pong")
+bot.command("!internal", restrictToDomain("company.org"), async (ctx) => {
+  await ctx.reply.text("Top secret internal data.")
 })
 ```
 
-Calling `next()` more than once throws.
+### Contextual Replies
 
-## Replies
-
-If a user sends a command while replying to another message, the replied-to event is available as `req.repliedMessage`.
+You can inspect the message that a user replied to.
 
 ```ts
-const fact = new SubBot({
-  name: "fact",
-  command: ["!fact", "!check"],
-})
-
-fact.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  const claim = req.body.trim() || req.repliedMessage?.body
-
-  if (!claim) {
-    await res.replyText("Usage: !fact <claim>, or reply to a message with !fact")
-    return
+bot.command("!ping", async (ctx) => {
+  if (!ctx.message.reply?.target) {
+    return ctx.reply.text("pong")
   }
-
-  await res.sendText("Checking...")
-  await res.replyMarkdown(await checkClaim(claim))
+  await ctx.reply.text(`pong for ${ctx.message.reply.target.sender}'s message`)
 })
 ```
 
-For example, `!ping` sent as a reply can inspect the original event:
+### Media & Polls
+
+Incoming media is normalized onto `ctx.message.media`.
 
 ```ts
-ping.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  if (!req.repliedMessage) {
-    await res.replyText("pong")
-    return
-  }
-
-  await res.replyText(
-    `pong for ${req.repliedMessage.sender}'s ${req.repliedMessage.messageType}`,
-  )
+bot.command("!image", async (ctx) => {
+  if (ctx.message.type !== "image" || !ctx.message.media) return
+  const bytes = await ctx.downloadMedia()
+  await ctx.reply.text(`Downloaded ${bytes.length} bytes`)
 })
 ```
 
-The runtime extracts replied event metadata from Matrix text, notice, server notice, image, file, and video messages. For media replies, `req.repliedMessage.body` is the caption or filename, and `req.repliedMessage.media` carries file metadata.
-
-If the user replied to unsupported content, `req.replyUnsupported` is `true`.
-
-## Media And Polls
-
-Incoming media is normalized onto `req.media`. For this to match a command, send the command as the media caption.
-
+Send media or polls seamlessly:
 ```ts
-const images = new SubBot({
-  name: "image-info",
-  command: "!image",
-})
+await ctx.send.image("./result.png")
+await ctx.send.video("./clip.mp4")
+await ctx.send.file("./report.pdf")
 
-images.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  if (req.messageType !== "image" || !req.media) {
-    await res.replyText("Send an image with caption !image")
-    return
-  }
-
-  const bytes = await res.downloadMedia()
-  await res.replyText(`${req.media.filename}: ${bytes.length} bytes`)
-})
-```
-
-If a command is sent as a reply to a media message, download that replied-to media by event id:
-
-```ts
-images.use(async (req: MatrixRequest, res: MatrixResponse) => {
-  if (!req.repliedMessage?.media) {
-    await res.replyText("Reply to an image or document with !image")
-    return
-  }
-
-  const bytes = await res.downloadMedia({
-    eventId: req.repliedMessage.eventId,
-  })
-
-  await res.replyText(`${req.repliedMessage.media.filename}: ${bytes.length} bytes`)
-})
-```
-
-You can also download media from the bot client when you already have both ids:
-
-```ts
-const bytes = await bot.downloadMedia(roomId, eventId)
-```
-
-Send media:
-
-```ts
-await res.sendImage("./result.png")
-await res.sendVideo("./clip.mp4")
-await res.sendFile("./report.pdf")
-
-await res.sendImage({
-  filename: "result.png",
-  contentType: "image/png",
-  data: imageBuffer,
-})
-
-await res.sendMedia("file", {
-  path: "./exports/result.csv",
-  filename: "latest-result.csv",
-})
-```
-
-String paths are read by the bot process, so relative paths are resolved from the process current working directory. Use the object form when you want to override the visible filename or content type.
-
-Send a poll:
-
-```ts
-await res.sendPoll({
+await ctx.send.poll({
   question: "Ship it?",
-  answers: [
-    { id: "yes", text: "Yes" },
-    { id: "no", text: "No" },
-  ],
+  answers: [{ id: "yes", text: "Yes" }, { id: "no", text: "No" }],
 })
 ```
 
-## Logging
+---
 
-Pass a logger when creating `MatrixBot`.
+## 🛠 Advanced Features
 
-```ts
-const bot = new MatrixBot({
-  homeserverUrl,
-  username,
-  password,
-  recoveryKey,
-  logger(event) {
-    process.stdout.write(`${JSON.stringify(event)}\n`)
-  },
-})
-```
+### Built-in Utility Commands
 
-Log events are structured:
+Set `config: { utility: true }` in your `MatrixBot` constructor to instantly unlock powerful maintainer commands. 
 
-```ts
-type MatrixLogEvent = {
-  level: "debug" | "info" | "warn" | "error"
-  message: string
-  component: "sdk" | "runtime" | "dispatch"
-  eventId?: string
-  roomId?: string
-  sender?: string
-  handled?: number
-  durationMs?: number
-  error?: string
-}
-```
+- **Public Commands:**
+  - `!help`: Generates a Markdown-formatted map of all available commands and groups.
+- **Admin-Only Commands (Direct Messages only):**
+  - `!ping`: Responds with "pong".
+  - `!uptime`: Outputs the bot process uptime.
+  - `!version`: Outputs the bot version (from `package.json`).
+  - `!status`: Aggregates uptime, memory usage, and command/listener counts.
+- **Password-Protected Maintainer Commands:**
+  *(Requires `MAINTENANCE_PASSWORD` in your environment)*
+  - `!maintenance <password>`: Toggles maintenance mode. When active, all non-maintenance commands are intercepted and the bot politely replies that it is under maintenance.
+  - `!reload <password>`: Triggers a graceful rebuild and restart by executing `scripts/reload.sh`.
+  - `!shutdown <password>`: Initiates a graceful process exit.
 
-The default logger writes JSON for `info`, `warn`, and `error`. It drops `debug`.
+### Self-Documentation
 
-Runtime logs from Rust are also sent through this logger.
-
-## Global Error Handler
-
-Use `onError` once instead of wrapping every handler in `try/catch`.
+When `config.selfDocumentation` is enabled, the bot dynamically writes a `matrix-bot-family.md` file charting its entire capability tree.
 
 ```ts
 const bot = new MatrixBot({
-  homeserverUrl,
-  username,
-  password,
-  recoveryKey,
-  async onError({ error, phase, request }) {
-    await sendToOps({
-      phase,
-      eventId: request?.eventId,
-      roomId: request?.roomId,
-      error,
-    })
-  },
-})
-```
-
-Handler errors are caught at the dispatch boundary and do not stop the sync loop.
-
-## API Shape
-
-### `MatrixBot`
-
-```ts
-const bot = new MatrixBot({
-  homeserverUrl: "https://matrix.org",
-  username: "@bot:matrix.org",
-  password: "...",
-  recoveryKey: "...",
-  dataDir: ".matrix-bot-sdk",
+  // ...
   config: {
-    announceSubBotUsage: true,
     selfDocumentation: true,
-    documentationPath: "matrix-bot-family.md",
+    documentationPath: "docs/bot-family.md",
   },
-  logger,
-  onError,
 })
 ```
 
-| Option | Required | Meaning |
+---
+
+## ⚙️ API Reference
+
+### MatrixBotOptions
+
+| Option | Required | Description |
 | --- | --- | --- |
-| `homeserverUrl` | Yes | Matrix homeserver URL. |
+| `homeserverUrl` | Yes | Matrix homeserver URL (e.g. `https://matrix.org`). |
 | `username` | Yes | Bot Matrix user id or login username. |
 | `password` | Yes | Bot account password. |
 | `recoveryKey` | Yes | Matrix E2EE recovery key. |
-| `dataDir` | No | Session, store, and cache directory. |
-| `config.announceSubBotUsage` | No | Sends `> using <subbot>...` before running a matched subbot. Defaults to `false`. |
-| `config.selfDocumentation` | No | Writes bot family Markdown when `listen()` starts. Defaults to `false`. |
-| `config.documentationPath` | No | Markdown output path. Defaults to `matrix-bot-family.md`. |
+| `admin` | No | Users allowed to invite the bot and use admin-only commands. |
+| `moderator` | No | Users with moderator permissions. Admins implicitly inherit these rights. |
+| `timelineLimit` | No | Per-room sync backlog cap. Defaults to `20`. |
+| `dataDir` | No | Session, store, and cache directory. Defaults to `.matrix-bot-sdk`. |
+| `config.announceCommandGroupUsage` | No | Sends `> using <group>...` before running a matched group. |
+| `config.selfDocumentation` | No | Writes bot family Markdown when `start()` runs. |
+| `config.utility` | No | Activates built-in maintainer/utility commands. |
 | `logger` | No | Production log sink. |
 | `onError` | No | Global runtime or dispatch error hook. |
 
-```ts
-bot.use(subBot)
+### Context Object
 
-await bot.listen({
-  owners: ["@you:matrix.org"],
-  timelineLimit: 20,
-})
-```
-
-| Listen option | Required | Meaning |
-| --- | --- | --- |
-| `owners` | Yes | Users allowed to invite the bot into rooms. |
-| `timelineLimit` | No | Per-room sync backlog cap. Defaults to `20`. |
-
-### `SubBot`
+The `Context` object encapsulates everything you need for a given event:
 
 ```ts
-const fact = new SubBot({
-  name: "fact",
-  command: ["!fact", "!check"],
-  description: "Checks claims.",
-  category: "Utility",
-  adminOnly: false,
-  config: {},
-})
-```
-
-| Option | Required | Meaning |
-| --- | --- | --- |
-| `name` | Yes | Unique module name. |
-| `command` | Yes | Main command or aliases. |
-| `commands` | No | Extra aliases merged with `command`. |
-| `description` | No | Help text metadata. |
-| `category` | No | Grouping metadata. |
-| `adminOnly` | No | Admin metadata flag. |
-| `config` | No | Module-specific dependencies or settings. |
-
-Sub-bot names and command aliases must be unique. In native mode, these aliases are registered with Rust so unrelated Matrix events can be ignored before Bun sees them.
-
-### Request
-
-```ts
-type MatrixRequest = {
-  eventId: string
-  roomId: string
-  sender: string
-  messageType: "text" | "notice" | "server_notice" | "image" | "file" | "video" | "poll"
-  rawBody: string
-  body: string
-  media?: MediaMessage
-  poll?: PollMessage
-  repliedMessage?: RepliedMessage
-  replyUnsupported: boolean
-}
-```
-
-```ts
-type RepliedMessage = {
-  eventId: string
-  sender: string
-  messageType: "text" | "notice" | "server_notice" | "image" | "file" | "video" | "poll"
-  body: string
-  media?: MediaMessage
-}
-```
-
-`rawBody` is the original text. `body` is the remaining text after routing consumes the matched command tokens.
-
-### Response
-
-```ts
-type MatrixResponse = {
-  sendText(body: string): Promise<void>
-  sendMarkdown(body: string): Promise<void>
-  sendMedia(kind: "image" | "file" | "video", attachment: MediaAttachment): Promise<void>
-  sendImage(attachment: MediaAttachment): Promise<void>
-  sendFile(attachment: MediaAttachment): Promise<void>
-  sendVideo(attachment: MediaAttachment): Promise<void>
-  sendPoll(poll: OutboundPoll): Promise<void>
-  replyText(body: string): Promise<void>
-  replyMarkdown(body: string): Promise<void>
+type Context = {
+  message: {
+    id: string
+    type: "text" | "notice" | "server_notice" | "image" | "file" | "video" | "poll"
+    rawBody: string  // Original text
+    body: string     // Text after route consumption
+    media?: MediaMessage
+    poll?: PollMessage
+    reply?: { target?: RepliedMessage; isUnsupported: boolean }
+  }
+  room: { id: string; isDirect: boolean }
+  sender: {
+    id: string
+    isAdmin(userId?: string): boolean
+    isModerator(userId?: string): boolean
+  }
+  send: {
+    text(body: string): Promise<void>
+    markdown(body: string): Promise<void>
+    media(kind: "image" | "file" | "video", attachment: MediaAttachment): Promise<void>
+    image(attachment: MediaAttachment): Promise<void>
+    file(attachment: MediaAttachment): Promise<void>
+    video(attachment: MediaAttachment): Promise<void>
+    poll(poll: OutboundPoll): Promise<void>
+  }
+  reply: {
+    text(body: string): Promise<void>
+    markdown(body: string): Promise<void>
+  }
   downloadMedia(target?: string | { roomId?: string; eventId?: string }): Promise<Buffer>
 }
 ```
 
-`send*` posts to the room. `reply*` replies to the incoming event.
-`downloadMedia()` returns the incoming event's bytes. Pass an event id, or `{ eventId }`, to download another media event from the same room. Pass `{ roomId, eventId }` to download from a specific room.
+---
 
-The bot client also exposes:
+## 🛡 Logging & Error Handling
 
-```ts
-await bot.downloadMedia(roomId, eventId)
-```
+Provide a custom logger or rely on the structured default JSON logger.
 
 ```ts
-type MediaAttachment =
-  | string
-  | { path: string; filename?: string; contentType?: string }
-  | { filename: string; contentType: string; data: Buffer | Uint8Array }
+const bot = new MatrixBot({
+  // ...
+  logger(event) {
+    process.stdout.write(`${JSON.stringify(event)}\n`)
+  },
+  async onError({ error, phase, request }) {
+    console.error(`Error in ${phase}:`, error)
+    // Send alert to ops, log to Datadog, etc.
+  }
+})
 ```
 
-## Environment Variables Used By The Example
+Handler errors are safely caught at the dispatch boundary, ensuring your bot's sync loop is never interrupted.
 
-| Variable | Meaning |
-| --- | --- |
-| `HOMESERVER_URL` | Homeserver URL, for example `https://matrix.org`. |
-| `BOT_USERNAME` | Bot Matrix user id or username. |
-| `BOT_PASSWORD` | Bot account password. |
-| `RECOVERY_KEY` | E2EE recovery key. |
-| `BOT_OWNERS` | Comma-separated owner user ids allowed to invite the bot. |
-| `DATA_DIR` | Optional data directory. |
-| `TIMELINE_LIMIT` | Optional sync backlog limit. Defaults to `20`. |
+---
 
-## Notes
-
-- `listen()` intentionally never resolves while the bot is running.
-- The SDK sends Matrix notices, not normal user text messages.
-- Markdown helpers render Matrix-formatted Markdown.
-- Package publishing and platform binary distribution are not implemented yet.
+*Note: This repository is usable locally but is not currently packaged for npm. Package publishing and platform binary distribution are planned.*

@@ -1,4 +1,4 @@
-use crate::{Ajent, HandlerBinding, MatrixContext, RouteLayer, SubBot};
+use crate::{Listener, HandlerBinding, MatrixContext, RouteLayer, CommandGroup};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DispatchPlan {
@@ -21,12 +21,12 @@ impl DispatchPlan {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DispatchRoute {
-    pub sub_bot_name: String,
+    pub command_group_name: String,
     pub steps: Vec<DispatchStep>,
 }
 
 impl DispatchRoute {
-    pub fn from_route(sub_bot: &SubBot, route: &RouteLayer) -> Self {
+    pub fn from_route(command_group: &CommandGroup, route: &RouteLayer) -> Self {
         let mut steps = route
             .middleware
             .iter()
@@ -36,7 +36,7 @@ impl DispatchRoute {
         steps.push(DispatchStep::Handler(route.handler.clone()));
 
         Self {
-            sub_bot_name: sub_bot.name().to_owned(),
+            command_group_name: command_group.name().to_owned(),
             steps,
         }
     }
@@ -49,70 +49,70 @@ pub enum DispatchStep {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AjentDispatchPlan {
-    ajents: Vec<AjentDispatchRoute>,
+pub struct ListenerDispatchPlan {
+    listeners: Vec<ListenerDispatchRoute>,
 }
 
-impl AjentDispatchPlan {
-    pub fn new(ajents: Vec<AjentDispatchRoute>) -> Self {
-        Self { ajents }
+impl ListenerDispatchPlan {
+    pub fn new(listeners: Vec<ListenerDispatchRoute>) -> Self {
+        Self { listeners }
     }
 
-    pub fn ajents(&self) -> &[AjentDispatchRoute] {
-        &self.ajents
+    pub fn listeners(&self) -> &[ListenerDispatchRoute] {
+        &self.listeners
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ajents.is_empty()
+        self.listeners.is_empty()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AjentDispatchRoute {
-    pub ajent_name: String,
+pub struct ListenerDispatchRoute {
+    pub listener_name: String,
     pub handler: HandlerBinding,
 }
 
 pub fn build_dispatch_plan<'a>(
-    sub_bots: impl IntoIterator<Item = &'a SubBot>,
+    command_groups: impl IntoIterator<Item = &'a CommandGroup>,
     ctx: &MatrixContext,
 ) -> DispatchPlan {
-    let routes = sub_bots
+    let routes = command_groups
         .into_iter()
-        .flat_map(|sub_bot| {
-            sub_bot
+        .flat_map(|command_group| {
+            command_group
                 .matching_routes(ctx)
-                .map(|route| DispatchRoute::from_route(sub_bot, route))
+                .map(|route| DispatchRoute::from_route(command_group, route))
         })
         .collect();
 
     DispatchPlan::new(routes)
 }
 
-pub fn build_ajent_dispatch_plan<'a>(
-    ajents: impl IntoIterator<Item = &'a Ajent>,
+pub fn build_listener_dispatch_plan<'a>(
+    listeners: impl IntoIterator<Item = &'a Listener>,
     ctx: &MatrixContext,
-) -> AjentDispatchPlan {
-    let routes = ajents
+) -> ListenerDispatchPlan {
+    let routes = listeners
         .into_iter()
-        .flat_map(|ajent| {
-            ajent
+        .flat_map(|listener| {
+            listener
                 .triggers()
                 .iter()
                 .filter(|trigger| trigger.matches_matrix_message(ctx))
                 .map(|trigger| {
                     let handler = match trigger {
-                        crate::AjentTrigger::MatrixMessage(trigger) => trigger.handler().clone(),
+                        crate::ListenerTrigger::MatrixMessage(trigger) => trigger.handler().clone(),
                     };
-                    AjentDispatchRoute {
-                        ajent_name: ajent.name().to_owned(),
+                    ListenerDispatchRoute {
+                        listener_name: listener.name().to_owned(),
                         handler,
                     }
                 })
         })
         .collect();
 
-    AjentDispatchPlan::new(routes)
+    ListenerDispatchPlan::new(routes)
 }
 
 #[cfg(test)]
@@ -122,8 +122,8 @@ mod tests {
 
     #[test]
     fn builds_steps_with_middleware_before_handler() {
-        let mut sub_bot = SubBot::new("factcheck").unwrap();
-        sub_bot.use_route(
+        let mut command_group = CommandGroup::new("factcheck").unwrap();
+        command_group.use_route(
             RouteLayer::new(
                 RouteMatcher::prefix("!check"),
                 HandlerBinding::new("factcheck_handler"),
@@ -143,12 +143,12 @@ mod tests {
             ),
             "@bot:example.org",
         );
-        let plan = build_dispatch_plan([&sub_bot], &ctx);
+        let plan = build_dispatch_plan([&command_group], &ctx);
 
         assert_eq!(
             plan.routes(),
             &[DispatchRoute {
-                sub_bot_name: "factcheck".to_owned(),
+                command_group_name: "factcheck".to_owned(),
                 steps: vec![
                     DispatchStep::Middleware(HandlerBinding::new("owner_only")),
                     DispatchStep::Middleware(HandlerBinding::new("typing_notice")),
@@ -159,13 +159,13 @@ mod tests {
     }
 
     #[test]
-    fn builds_ajent_dispatch_plan_for_matching_matrix_message_triggers() {
-        let mut all_messages = Ajent::new("all-messages").unwrap();
-        let mut images = Ajent::new("images").unwrap();
+    fn builds_listener_dispatch_plan_for_matching_matrix_message_triggers() {
+        let mut all_messages = Listener::new("all-messages").unwrap();
+        let mut images = Listener::new("images").unwrap();
         all_messages
-            .on_matrix_message(crate::AjentMatrixMessageTrigger::new(HandlerBinding::new("js")));
+            .on_matrix_message(crate::ListenerMatrixMessageTrigger::new(HandlerBinding::new("js")));
         images.on_matrix_message(
-            crate::AjentMatrixMessageTrigger::new(HandlerBinding::new("js"))
+            crate::ListenerMatrixMessageTrigger::new(HandlerBinding::new("js"))
                 .with_message_types(vec!["image".to_owned()]),
         );
 
@@ -178,12 +178,12 @@ mod tests {
             ),
             "@bot:example.org",
         );
-        let plan = build_ajent_dispatch_plan([&all_messages, &images], &ctx);
+        let plan = build_listener_dispatch_plan([&all_messages, &images], &ctx);
 
         assert_eq!(
-            plan.ajents(),
-            &[AjentDispatchRoute {
-                ajent_name: "all-messages".to_owned(),
+            plan.listeners(),
+            &[ListenerDispatchRoute {
+                listener_name: "all-messages".to_owned(),
                 handler: HandlerBinding::new("js"),
             }]
         );

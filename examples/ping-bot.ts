@@ -1,9 +1,6 @@
-import {
-  MatrixBot,
-  SubBot,
-  type MatrixRequest,
-  type MatrixResponse,
-} from "../js/src/index"
+import { MatrixBot } from "../js/src/index"
+
+const admin = requiredList("BOT_ADMINS")
 
 const bot = new MatrixBot({
   homeserverUrl: required("HOMESERVER_URL"),
@@ -12,27 +9,19 @@ const bot = new MatrixBot({
   recoveryKey: required("RECOVERY_KEY"),
   dataDir: Bun.env.DATA_DIR ?? ".matrix-bot-sdk",
   config: {
-    announceSubBotUsage: true,
+    announceCommandGroupUsage: true,
     selfDocumentation: true,
   },
-})
-
-const ping = new SubBot({
-  name: "ping",
-  command: ["!ping", "!p"],
-  description: "Replies with pong.",
-  category: "Utility",
-})
-
-ping.use(async (_req: MatrixRequest, res: MatrixResponse) => {
-  await res.replyText("pong")
-})
-
-bot.use(ping)
-
-await bot.listen({
-  owners: requiredList("BOT_OWNERS"),
+  admin,
   timelineLimit: Number(Bun.env.TIMELINE_LIMIT ?? 20),
+})
+
+bot.command(["!ping", "!p"], async (ctx) => {
+  await ctx.reply.text("pong")
+})
+
+bot.start(() => {
+  console.log("Ping bot is ready!")
 })
 
 function required(name: string): string {
