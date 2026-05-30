@@ -10,9 +10,12 @@ type NativeMatrixBot = {
   sendImage(roomId: string, attachment: NativeMediaAttachment): Promise<void>
   sendFile(roomId: string, attachment: NativeMediaAttachment): Promise<void>
   sendVideo(roomId: string, attachment: NativeMediaAttachment): Promise<void>
-  sendPoll(roomId: string, poll: NativePoll): Promise<void>
+  sendPoll(roomId: string, poll: NativePoll): Promise<string>
+  closePoll(roomId: string, pollEventId: string, fallbackText?: string): Promise<void>
   replyText(roomId: string, eventId: string, body: string): Promise<void>
   replyMarkdown(roomId: string, eventId: string, body: string): Promise<void>
+  react(roomId: string, eventId: string, emoji: string): Promise<void>
+  redact(roomId: string, eventId: string, reason?: string): Promise<void>
   downloadMedia(roomId: string, eventId: string): Promise<Buffer>
   registerCommandGroup(commandGroup: NativeCommandGroup): void
   registerListener?(listener: NativeListener): void
@@ -40,6 +43,8 @@ export type NativeIncomingMessage = {
   body: string
   media?: NativeMediaMessage
   poll?: NativePollMessage
+  pollResponse?: NativePollResponseMessage
+  pollEnd?: NativePollEndMessage
   repliedMessage?: {
     eventId: string
     sender: string
@@ -48,7 +53,7 @@ export type NativeIncomingMessage = {
     media?: NativeMediaMessage
   }
   replyUnsupported: boolean
-  is_direct: boolean
+  isDirect: boolean
 }
 
 export type NativeRuntimeLog = {
@@ -64,6 +69,8 @@ export type MatrixMessageType =
   | "file"
   | "video"
   | "poll"
+  | "poll_response"
+  | "poll_end"
 
 export type NativeMediaMessage = {
   kind: "image" | "file" | "video"
@@ -99,6 +106,18 @@ export type NativeMediaAttachment = {
 export type NativePoll = {
   question: string
   answers: NativePollAnswer[]
+  kind?: string
+  maxSelections?: number
+}
+
+export type NativePollResponseMessage = {
+  pollEventId: string
+  selections: string[]
+}
+
+export type NativePollEndMessage = {
+  pollEventId: string
+  text: string
 }
 
 export type NativeBinding = {
@@ -108,7 +127,7 @@ export type NativeBinding = {
     password: string
     recoveryKey: string
     dataDir?: string
-    admin?: string[]
+    admin: string[]
     moderator?: string[]
     timeline_limit?: number
   }) => NativeMatrixBot

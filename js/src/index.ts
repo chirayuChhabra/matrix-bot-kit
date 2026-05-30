@@ -9,17 +9,31 @@ import {
   type NativeMediaAttachment,
 } from "./native"
 
+/**
+ * Configuration options for creating a MatrixBot instance.
+ */
 export type MatrixBotOptions = {
+  /** The URL of the Matrix homeserver to connect to. */
   homeserverUrl: string
+  /** The bot's username on the homeserver. */
   username: string
+  /** The bot's password on the homeserver. */
   password: string
+  /** The recovery key for encryption. */
   recoveryKey: string
+  /** The local directory to store persistent data (e.g., sqlite DBs for session info). */
   dataDir?: string
+  /** Additional runtime configuration for the bot. */
   config?: MatrixBotRuntimeConfig
+  /** A custom logger function. Overrides the default logger if provided. */
   logger?: MatrixLogger
+  /** A custom error handler. */
   onError?: MatrixErrorHandler
-  admin?: string[]
+  /** A list of user IDs who have admin privileges. */
+  admin: string[]
+  /** A list of user IDs who have moderator privileges. */
   moderator?: string[]
+  /** The number of messages to fetch from the timeline on startup. */
   timelineLimit?: number
 }
 
@@ -39,51 +53,123 @@ type ResolvedMatrixBotRuntimeConfig = {
 
 
 
-export interface SendContext extends Promise<void> {
+/**
+ * Context for sending a new message to the room.
+ * Supports chaining methods to send different types of media or formatting.
+ * The promise resolves with the event ID of the last sent message (e.g. useful for tracking polls).
+ */
+export interface SendContext extends Promise<string | undefined> {
+  /** Sends a plain text message to the room. */
   message: (body: string) => SendContext
+  /** Sends a plain text message to the room. Alias for `message`. */
   text: (body: string) => SendContext
+  /** Sends a markdown-formatted message to the room. */
   markdown: (body: string) => SendContext
+  /** Sends a media file (image, file, or video) to the room. */
   media: (kind: MediaKind, attachment: MediaAttachment) => SendContext
+  /** Sends an image attachment to the room. */
   image: (attachment: MediaAttachment) => SendContext
+  /** Sends a file attachment to the room. */
   file: (attachment: MediaAttachment) => SendContext
+  /** Sends a video attachment to the room. */
   video: (attachment: MediaAttachment) => SendContext
+  /** Sends a poll to the room. */
   poll: (poll: OutboundPoll) => SendContext
 }
 
+/**
+ * Context for replying to the current message in the room.
+ * Supports chaining methods to send formatted replies.
+ */
 export interface ReplyContext extends Promise<void> {
+  /** Replies to the current message with plain text. */
   message: (body: string) => ReplyContext
+  /** Replies to the current message with plain text. Alias for `message`. */
   text: (body: string) => ReplyContext
+  /** Replies to the current message with a markdown-formatted string. */
   markdown: (body: string) => ReplyContext
 }
 
+/**
+ * Context provided to command and listener handlers, containing the message event, 
+ * sender information, room details, and utility functions to reply or react.
+ */
 export type Context = {
+  /** Information about the incoming message that triggered this handler. */
   message: {
+    /** The Matrix event ID of the message. */
     id: string
+    /** The type of message (e.g., text, image, poll). */
     type: MatrixMessageType
+    /** The raw, unparsed body of the message. */
     rawBody: string
+    /** The body of the message, with any command prefix stripped if applicable. */
     body: string
+    /** Media attachment information, if the message contains media. */
     media?: MediaMessage
+    /** Poll information, if the message is a poll. */
     poll?: PollMessage
+    /** Poll response (vote) information, if the message is a poll vote. */
+    pollResponse?: PollResponseMessage
+    /** Poll end information, if the message is a poll close event. */
+    pollEnd?: PollEndMessage
+    /** Information about the message this message is replying to, if any. */
     reply?: {
       target?: RepliedMessage
       isUnsupported: boolean
     }
+    /** Reacts to the current message with the given emoji. */
+    react: (emoji: string) => Promise<void>
+    /** Redacts (deletes) the current message. */
+    redact: (reason?: string) => Promise<void>
   }
+  /** Information about the room where the message was sent. */
   room: {
+    /** The Matrix room ID. */
     id: string
+    /** True if the room is a direct (1:1) chat. */
     isDirect: boolean
   }
+  /** Information about the sender of the message. */
   sender: {
+    /** The Matrix user ID of the sender. */
     id: string
+    /** A markdown-formatted mention for the sender. */
+    mention: string
+    /** Returns true if the sender (or the specified user ID) is an admin. */
     isAdmin: (userId?: string) => boolean
+    /** Returns true if the sender (or the specified user ID) is a moderator. */
     isModerator: (userId?: string) => boolean
   }
+  /** Sends a new message to the room. Chainable methods allow sending different content types. */
   send: SendContext
+  /** Replies to the current message. Chainable methods allow formatted replies. */
   reply: ReplyContext
+  /** A persistent key-value store for session data specific to this user in this room. */
+  session: Record<string, any>
+  /** Sends a prompt to the user and waits for their next reply in the room. */
+  prompt: (body: string, options?: { timeoutMs?: number }) => Promise<Context>
 
+  /** Closes an active poll in this room. */
+  closePoll: (pollEventId: string, fallbackText?: string) => Promise<void>
+
+  /** Downloads media from the given target or the current message if none provided. */
   downloadMedia: (target?: MediaDownloadTarget) => Promise<Buffer>
 }
 
+export type EventFilterOptions = {
+  rooms?: string | string[]
+  actionId?: string
+}
+
+export type WebhookOptions = {
+  source: string
+  event?: string
+}
+
+export type ScheduleOptions = {
+  everyMs: number
+}
 
 export type MediaMessage = {
   kind: MediaKind
@@ -129,10 +215,32 @@ export type PollMessage = {
 export type OutboundPoll = {
   question: string
   answers: PollAnswer[]
+  /** Poll disclosure kind. Use "undisclosed" to hide votes until the poll ends. Defaults to "disclosed". */
+  kind?: "disclosed" | "undisclosed"
+  /** Maximum number of answers a user can select. Defaults to 1. */
+  maxSelections?: number
+  /** An action ID (tag) to uniquely identify this poll for `bot.on.pollVote({ actionId })`. */
+  actionId?: string
 }
 
 export type PollAnswer = {
   id: string
+  text: string
+}
+
+export type PollResponseMessage = {
+  /** The event ID of the poll this vote is for. */
+  pollEventId: string
+  /** The answer IDs the user selected. */
+  selections: string[]
+  /** The action ID if the original poll was tagged. */
+  actionId?: string
+}
+
+export type PollEndMessage = {
+  /** The event ID of the poll that was ended. */
+  pollEventId: string
+  /** The fallback text provided when ending the poll. */
   text: string
 }
 
@@ -194,6 +302,12 @@ export type ListenerEvent = {
 export type ListenerActions = {
   matrix?: Context
 }
+
+export type ListenerMiddleware = (
+  event: ListenerEvent,
+  actions: ListenerActions,
+  next: Next,
+) => Promise<void> | void
 
 export type ListenerHandler = (
   event: ListenerEvent,
@@ -262,6 +376,10 @@ export type CommandOptions<TConfig extends CommandConfig = CommandConfig> = {
   config?: TConfig
 }
 
+/**
+ * The main entrypoint for the Matrix Bot SDK.
+ * Use this class to configure the bot, register commands and listeners, and start the runtime.
+ */
 export class MatrixBot {
   readonly options: MatrixBotOptions
   readonly commandGroups: CommandGroup[] = []
@@ -275,12 +393,15 @@ export class MatrixBot {
   private onListenerCount = 0
   private scheduleListenerCount = 0
   private isUnderMaintenance = false
+  private pendingPrompts = new Map<string, { resolve: (ctx: Context) => void, reject: (err: Error) => void, timer: ReturnType<typeof setTimeout> }>()
+  private sessions = new Map<string, Record<string, any>>()
 
   constructor(options: MatrixBotOptions) {
     assertPresent("homeserverUrl", options.homeserverUrl)
     assertPresent("username", options.username)
     assertPresent("password", options.password)
     assertPresent("recoveryKey", options.recoveryKey)
+    assertPresent("admin", options.admin)
     this.options = { ...options }
     this.logger = options.logger ?? defaultLogger
     this.errorHandler = options.onError ?? this.defaultErrorHandler.bind(this)
@@ -295,21 +416,19 @@ export class MatrixBot {
   }
 
   private setupUtilityCommands() {
-    this.command("!ping", async (ctx) => {
+    const pingGroup = new CommandGroup({ name: "!ping", command: "!ping", description: "Replies with pong.", category: "System" })
+    pingGroup.use(async (ctx) => {
       await ctx.reply.text("pong")
     })
+    this.useCommandGroup(pingGroup)
 
-    this.command("!uptime", async (ctx) => {
-      if (!ctx.room.isDirect || !ctx.sender.isAdmin(ctx.sender.id)) return
-      const uptime = process.uptime()
-      const hours = Math.floor(uptime / 3600)
-      const minutes = Math.floor((uptime % 3600) / 60)
-      const seconds = Math.floor(uptime % 60)
-      await ctx.reply.text(`Total uptime: ${hours}h ${minutes}m ${seconds}s`)
-    })
+    const registerUtility = (name: string, description: string, handler: Handler) => {
+      const group = new CommandGroup({ name, command: name, description, category: "System", adminOnly: true, roomType: "direct" })
+      group.use(handler)
+      this.useCommandGroup(group)
+    }
 
-    this.command("!version", async (ctx) => {
-      if (!ctx.room.isDirect || !ctx.sender.isAdmin(ctx.sender.id)) return
+    registerUtility("!version", "Shows the bot version.", async (ctx) => {
       try {
         const pkgStr = await readFile("package.json", "utf-8")
         const pkg = JSON.parse(pkgStr)
@@ -319,15 +438,21 @@ export class MatrixBot {
       }
     })
 
-    this.command("!status", async (ctx) => {
-      if (!ctx.room.isDirect || !ctx.sender.isAdmin(ctx.sender.id)) return
+    registerUtility("!uptime", "Shows the bot uptime.", async (ctx) => {
+      const uptime = process.uptime()
+      const hours = Math.floor(uptime / 3600)
+      const minutes = Math.floor((uptime % 3600) / 60)
+      const seconds = Math.floor(uptime % 60)
+      await ctx.reply.text(`Total uptime: ${hours}h ${minutes}m ${seconds}s`)
+    })
+
+    registerUtility("!status", "Shows the bot status and memory usage.", async (ctx) => {
       const memUsage = process.memoryUsage()
       const memMB = Math.round(memUsage.rss / 1024 / 1024)
       await ctx.reply.text(`Status:\n- Uptime: ${Math.floor(process.uptime())}s\n- Memory RSS: ${memMB}MB\n- Command Groups: ${this.commandGroups.length}\n- Listeners: ${this.listeners.length}\n- Maintenance: ${this.isUnderMaintenance}`)
     })
 
-    this.command("!maintenance", async (ctx) => {
-      if (!ctx.room.isDirect || !ctx.sender.isAdmin(ctx.sender.id)) return
+    registerUtility("!maintenance", "Toggles maintenance mode.", async (ctx) => {
       const password = ctx.message.body.trim()
       // @ts-ignore
       const expectedPassword = typeof Bun !== "undefined" ? Bun.env.MAINTENANCE_PASSWORD : process.env.MAINTENANCE_PASSWORD
@@ -343,11 +468,14 @@ export class MatrixBot {
       await ctx.reply.text(`Maintenance mode is now ${this.isUnderMaintenance ? "ON" : "OFF"}.`)
     })
 
-    this.command("!shutdown", async (ctx) => {
-      if (!ctx.room.isDirect || !ctx.sender.isAdmin(ctx.sender.id)) return
+    registerUtility("!shutdown", "Shuts down the bot gracefully.", async (ctx) => {
       const password = ctx.message.body.trim()
       // @ts-ignore
       const expectedPassword = typeof Bun !== "undefined" ? Bun.env.MAINTENANCE_PASSWORD : process.env.MAINTENANCE_PASSWORD
+      if (!expectedPassword) {
+        await ctx.reply.text("Maintenance password not configured.")
+        return
+      }
       if (password !== expectedPassword) {
         await ctx.reply.text(password ? "Invalid password." : "Password required.")
         return
@@ -357,35 +485,73 @@ export class MatrixBot {
       process.exit(0)
     })
 
-    this.command("!reload", async (ctx) => {
-      if (!ctx.room.isDirect || !ctx.sender.isAdmin(ctx.sender.id)) return
-      const password = ctx.message.body.trim()
-      // @ts-ignore
-      const expectedPassword = typeof Bun !== "undefined" ? Bun.env.MAINTENANCE_PASSWORD : process.env.MAINTENANCE_PASSWORD
-      if (password !== expectedPassword) {
-        await ctx.reply.text("Invalid password.")
-        return
-      }
-      await ctx.reply.text("Rebuilding and restarting...")
-      exec("sh scripts/reload.sh", (error, stdout, stderr) => {
-        if (error) {
-          ctx.reply.text(`Reload failed: ${error.message}`).catch(console.error)
-        }
-      })
-    })
 
-    this.command("!help", async (ctx) => {
-      let doc = "# Commands\n\n"
+
+    const helpGroup = new CommandGroup({ name: "!help", command: "!help", description: "Shows this help message.", category: "System" })
+    helpGroup.use(async (ctx) => {
+      let doc = "# 🤖 Bot Commands\n\n"
+      doc += "Here is a list of all available commands:\n\n"
+
+      const categories = new Map<string, CommandGroup[]>()
       for (const group of this.commandGroups) {
-        doc += `## ${group.name}\n`
-        for (const cmd of group.commands) {
-          doc += `- \`${cmd}\`\n`
+        const category = group.category || "General"
+        if (!categories.has(category)) {
+          categories.set(category, [])
         }
+        categories.get(category)!.push(group)
       }
+
+      const sortedCategories = Array.from(categories.keys()).sort((a, b) => {
+        if (a === "General") return -1;
+        if (b === "General") return 1;
+        return a.localeCompare(b);
+      })
+
+      for (const category of sortedCategories) {
+        const groups = categories.get(category)!
+        doc += `## ${category}\n\n`
+        doc += "| Command | Description | Badges |\n"
+        doc += "| :--- | :--- | :--- |\n"
+        for (const group of groups) {
+          const groupCmds = group.commands.map((c) => `**\`${c}\`**`).join(", ")
+          
+          let badges: string[] = []
+          if (group.adminOnly) badges.push("🛡️")
+          if (group.moderatorOnly) badges.push("👮")
+          if (group.roomType === "direct") badges.push("💬")
+
+          const groupDesc = group.description || (group.childCommands.length > 0 ? "Command group" : "No description provided.")
+          doc += `| ${groupCmds} | ${groupDesc} | ${badges.join(" ")} |\n`
+          
+          for (const child of group.childCommands) {
+            const baseCmd = group.commands[0] || ""
+            const childCmds = child.commands.map((c) => `**\`${(baseCmd + " " + c).trim()}\`**`).join(", ")
+            
+            let childBadges: string[] = []
+            if (child.adminOnly) childBadges.push("🛡️")
+            if (child.moderatorOnly) childBadges.push("👮")
+            if (child.roomType === "direct") childBadges.push("💬")
+            
+            const childDesc = child.description || "No description provided."
+            doc += `| &nbsp;&nbsp;&nbsp;&nbsp;↳ ${childCmds} | ${childDesc} | ${childBadges.join(" ")} |\n`
+          }
+        }
+        doc += "\n"
+      }
+      
+      doc += "---\n"
+      doc += "🛡️ Admin Only | 👮 Moderator Only | 💬 DM Only\n"
+
       await ctx.reply.markdown(doc)
     })
+    this.useCommandGroup(helpGroup)
   }
 
+  /**
+   * Registers a sub-bot (CommandGroup) or a Listener with the main bot.
+   * @param component The CommandGroup or Listener to register.
+   * @returns This MatrixBot instance for chaining.
+   */
   use(component: CommandGroup | Listener): this {
     if (component instanceof Listener) {
       return this.useListener(component)
@@ -440,6 +606,12 @@ export class MatrixBot {
     return this.native?.listenerCount ?? this.listeners.length
   }
 
+  /**
+   * Registers a command handler.
+   * @param match The command string or array of command strings to trigger this handler.
+   * @param pipeline The middleware and handler to execute when the command is triggered.
+   * @returns This MatrixBot instance for chaining.
+   */
   command(match: string | string[], ...pipeline: [...Middleware[], Handler]): this {
     const group = new CommandGroup({ name: Array.isArray(match) ? match[0] : match, command: match })
     group.use(...pipeline)
@@ -453,30 +625,124 @@ export class MatrixBot {
     return group
   }
 
-  on(trigger: "message" | "image" | "file" | "video" | "poll" | string, handler: ListenerHandler): this {
-    const name = `on-${trigger}-${++this.onListenerCount}`
-    const triggers: ListenerTrigger[] = trigger === "message"
-      ? [{ kind: "matrix.message" }]
-      : [{ kind: "matrix.message", messageTypes: [trigger as MatrixMessageType] }]
+  /**
+   * The event listener namespace. Contains specialized methods for responding to Matrix events, schedules, and webhooks.
+   * All methods support chaining infinite middleware before the final handler.
+   * 
+   * @example
+   * ```ts
+   * // Global message listener
+   * bot.on.message(async (ctx) => { ... })
+   * 
+   * // Scoped listener using options
+   * bot.on.message({ rooms: ["!myRoom:matrix.org"] }, async (ctx) => { ... })
+   * 
+   * // Tagged poll vote listener
+   * bot.on.pollVote({ actionId: "my_poll_tag" }, async (ctx) => { ... })
+   * ```
+   */
+  public get on() {
+    const registerEvent = (eventType: string, optionsOrMiddleware: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => {
+      let options: EventFilterOptions = {}
+      let pipeline: any[] = []
+      
+      if (typeof optionsOrMiddleware === "function") {
+        pipeline = [optionsOrMiddleware, ...args]
+      } else {
+        options = optionsOrMiddleware as EventFilterOptions
+        pipeline = args
+      }
+      
+      let finalPipeline: any[] = []
+      
+      if (options.rooms) {
+        const roomsArr = Array.isArray(options.rooms) ? options.rooms : [options.rooms]
+        finalPipeline.push(async (event: ListenerEvent, actions: ListenerActions, next: Next) => {
+          if (!actions.matrix) return
+          if (!roomsArr.includes(actions.matrix.room.id)) return
+          await next()
+        })
+      }
+      
+      if (options.actionId) {
+        finalPipeline.push(async (event: ListenerEvent, actions: ListenerActions, next: Next) => {
+           const ctx = actions.matrix
+           if (eventType === "poll_response" && ctx?.message.pollResponse) {
+               if (ctx.message.pollResponse.actionId !== options.actionId) return
+           }
+           await next()
+        })
+      }
+      
+      finalPipeline.push(...pipeline)
+      
+      this.inner_on(eventType, ...(finalPipeline as any))
+    }
+
+    return {
+      message: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("message", opts, ...args),
+      image: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("image", opts, ...args),
+      file: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("file", opts, ...args),
+      video: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("video", opts, ...args),
+      audio: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("audio", opts, ...args),
+      notice: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("notice", opts, ...args),
+      server_notice: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("server_notice", opts, ...args),
+      poll: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("poll", opts, ...args),
+      pollVote: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("poll_response", opts, ...args),
+      pollEnd: (opts: EventFilterOptions | ListenerMiddleware | ListenerHandler, ...args: any[]) => registerEvent("poll_end", opts, ...args),
+      webhook: (opts: WebhookOptions, ...args: any[]) => {
+         this.webhook(opts.source, opts.event, ...args as any)
+      },
+      schedule: (opts: ScheduleOptions, ...args: any[]) => {
+         this.schedule(opts, ...args as any)
+      }
+    }
+  }
+
+  private inner_on(event: string, ...args: any[]): this {
+    const isRooms = typeof args[0] === "string" || (Array.isArray(args[0]) && typeof args[0][0] === "string")
+    const rooms = isRooms ? args[0] as string | string[] : undefined
+    const pipeline = isRooms ? args.slice(1) : args
+
+    const roomsArray = rooms ? (Array.isArray(rooms) ? rooms : [rooms]) : undefined
+
+    const name = `on-${event}-${++this.onListenerCount}`
+    const triggers: ListenerTrigger[] = event === "message"
+      ? [{ kind: "matrix.message", rooms: roomsArray }]
+      : [{ kind: "matrix.message", messageTypes: [event as MatrixMessageType], rooms: roomsArray }]
     const listener = new Listener({ name, triggers })
-    listener.use(handler)
+    listener.use(...(pipeline as [...ListenerMiddleware[], ListenerHandler]))
     this.useListener(listener)
     return this
   }
 
-  schedule(options: { everyMs?: number; at?: string|Date }, handler: ListenerHandler): this {
+  schedule(options: { everyMs?: number; at?: string|Date }, ...pipeline: [...ListenerMiddleware[], ListenerHandler]): this {
     const name = `schedule-${++this.scheduleListenerCount}`
     const listener = new Listener({ name, triggers: [{ kind: "schedule", ...options, source: "schedule" }] })
-    listener.use(handler)
+    listener.use(...pipeline)
     this.useListener(listener)
     return this
   }
 
-  webhook(source: string, event: string, handler: ListenerHandler): this {
+  webhook(source: string, event: string | undefined, ...pipeline: [...ListenerMiddleware[], ListenerHandler]): this {
     const listener = new Listener({ name: `webhook-${source}-${event}`, triggers: [{ kind: "external", source, event }] })
-    listener.use(handler)
+    listener.use(...pipeline)
     this.useListener(listener)
     return this
+  }
+
+  /**
+   * Closes an active poll in a room.
+   * @param roomId The room ID where the poll was created.
+   * @param pollEventId The event ID of the poll start event.
+   * @param fallbackText Optional custom fallback text for clients that don't support poll end events.
+   */
+  async closePoll(roomId: string, pollEventId: string, fallbackText?: string): Promise<void> {
+    if (!this.native) {
+      throw new Error("native Matrix runtime binding is missing")
+    }
+
+    return this.native.closePoll(roomId, pollEventId, fallbackText)
   }
 
 
@@ -592,6 +858,11 @@ export class MatrixBot {
     }
   }
 
+  /**
+   * Starts the bot runtime, connecting it to the Matrix homeserver and listening for events.
+   * @param callback An optional callback function executed when the bot successfully starts.
+   * @returns A promise that resolves when the bot stops.
+   */
   async start(callback?: () => void): Promise<void> {
     if (!this.native) {
       const error = new Error(
@@ -609,7 +880,17 @@ export class MatrixBot {
 
     this.native.start(
       (message) => {
-        const ctx = this.contextFromNative(message)
+        this.contextFromNative(message).then((ctx) => {
+        
+        const promptKey = `${message.roomId}:${message.sender}`
+        const pendingPrompt = this.pendingPrompts.get(promptKey)
+        if (pendingPrompt) {
+          clearTimeout(pendingPrompt.timer)
+          this.pendingPrompts.delete(promptKey)
+          pendingPrompt.resolve(ctx)
+          return
+        }
+
         this.dispatch(ctx).catch((error) => {
           void this.handleError({ error, phase: "dispatch", request: ctx })
         })
@@ -618,6 +899,9 @@ export class MatrixBot {
             void this.handleError({ error, phase: "dispatch", request: ctx })
           },
         )
+        }).catch(error => {
+          void this.handleError({ error, phase: "runtime" })
+        })
       },
       (event) => {
         this.log(event.level, event.message, {
@@ -639,11 +923,33 @@ export class MatrixBot {
     await new Promise<void>((resolve) => { this.stopResolve = resolve })
   }
 
+  private createPrompt(roomId: string, userId: string, timeoutMs: number = 60000): Promise<Context> {
+    const key = `${roomId}:${userId}`
+    const existing = this.pendingPrompts.get(key)
+    if (existing) {
+      clearTimeout(existing.timer)
+      existing.reject(new Error("Prompt superseded"))
+    }
+    
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingPrompts.delete(key)
+        reject(new Error("Prompt timeout"))
+      }, timeoutMs)
+      this.pendingPrompts.set(key, { resolve, reject, timer })
+    })
+  }
+
   stop(): void {
     for (const timer of this.scheduleTimers) {
       clearInterval(timer)
     }
     this.scheduleTimers = []
+    for (const prompt of this.pendingPrompts.values()) {
+      clearTimeout(prompt.timer)
+      prompt.reject(new Error("Bot stopped"))
+    }
+    this.pendingPrompts.clear()
     this.stopResolve?.()
     this.stopResolve = undefined
   }
@@ -702,9 +1008,28 @@ export class MatrixBot {
     }
   }
 
-  private contextFromNative(message: NativeIncomingMessage): Context {
+  private async contextFromNative(message: NativeIncomingMessage): Promise<Context> {
     const native = this.native;
     if (!native) throw new Error("native Matrix runtime binding is missing");
+
+    const sessionKey = `${message.roomId}:${message.sender}`
+    if (!this.sessions.has(sessionKey)) {
+      this.sessions.set(sessionKey, {})
+    }
+    const session = this.sessions.get(sessionKey)!
+
+    let actionId: string | undefined = undefined
+    if (message.pollResponse) {
+      try {
+        const rawJson = await native.getEvent(message.roomId, message.pollResponse.pollEventId)
+        if (rawJson) {
+          const parsed = JSON.parse(rawJson)
+          actionId = parsed?.content?.["org.matrix.custom.action_id"]
+        }
+      } catch (e) {
+        this.log("debug", `Failed to resolve actionId for poll ${message.pollResponse.pollEventId}: ${e}`, { component: "runtime" })
+      }
+    }
 
     return {
       message: {
@@ -720,89 +1045,56 @@ export class MatrixBot {
           durationMs: message.media.durationMs != null ? Number(message.media.durationMs) : undefined,
         } : undefined,
         poll: message.poll ? { ...message.poll, maxSelections: Number(message.poll.maxSelections ?? 1) } : undefined,
+        pollResponse: message.pollResponse ? {
+          pollEventId: message.pollResponse.pollEventId,
+          selections: message.pollResponse.selections,
+          actionId,
+        } : undefined,
+        pollEnd: message.pollEnd ? {
+          pollEventId: message.pollEnd.pollEventId,
+          text: message.pollEnd.text,
+        } : undefined,
         reply: (message.repliedMessage || message.replyUnsupported) ? {
           target: message.repliedMessage,
           isUnsupported: message.replyUnsupported
         } : undefined,
+        react: async (emoji: string) => native.react(message.roomId, message.eventId, emoji),
+        redact: async (reason?: string) => native.redact(message.roomId, message.eventId, reason),
       },
       room: {
         id: message.roomId,
-        isDirect: message.is_direct,
+        isDirect: message.isDirect,
       },
       sender: {
         id: message.sender,
-        isAdmin: (userId) => {
-          const u = userId ?? message.sender
-          return this.options.admin?.includes(u) ?? false
+        mention: `[${message.sender}](https://matrix.to/#/${message.sender})`,
+        isAdmin: (userId?: string) => {
+          const target = userId ?? message.sender
+          return this.options.admin?.includes(target) ?? false
         },
-        isModerator: (userId) => {
-          const u = userId ?? message.sender
-          if (this.options.admin?.includes(u)) return true
-          return this.options.moderator?.includes(u) ?? false
+        isModerator: (userId?: string) => {
+          const target = userId ?? message.sender
+          if (this.options.admin?.includes(target)) return true
+          return this.options.moderator?.includes(target) ?? false
         },
       },
-      send: (() => {
-        let promise = Promise.resolve();
-        const sendCtx: SendContext = {
-          then: (onfulfilled: any, onrejected: any) => promise.then(onfulfilled, onrejected),
-          catch: (onrejected: any) => promise.catch(onrejected),
-          finally: (onfinally: any) => promise.finally(onfinally),
-          get [Symbol.toStringTag]() { return "Promise" },
-          message: (body: string) => { promise = promise.then(() => native.sendText(message.roomId, body)); return sendCtx; },
-          text: (body: string) => sendCtx.message(body),
-          markdown: (body: string) => { promise = promise.then(() => native.sendMarkdown(message.roomId, body)); return sendCtx; },
-          media: (kind: MediaKind, attachment: MediaAttachment) => {
-            promise = promise.then(async () => {
-              const normalized = await normalizeMediaAttachment(attachment, kind)
-              if (kind === "image") await native.sendImage(message.roomId, normalized)
-              else if (kind === "video") await native.sendVideo(message.roomId, normalized)
-              else await native.sendFile(message.roomId, normalized)
-            })
-            return sendCtx;
-          },
-          image: (attachment: MediaAttachment) => {
-            promise = promise.then(async () => {
-              await native.sendImage(message.roomId, await normalizeMediaAttachment(attachment, "image"))
-            })
-            return sendCtx;
-          },
-          file: (attachment: MediaAttachment) => {
-            promise = promise.then(async () => {
-              await native.sendFile(message.roomId, await normalizeMediaAttachment(attachment, "file"))
-            })
-            return sendCtx;
-          },
-          video: (attachment: MediaAttachment) => {
-            promise = promise.then(async () => {
-              await native.sendVideo(message.roomId, await normalizeMediaAttachment(attachment, "video"))
-            })
-            return sendCtx;
-          },
-          poll: (poll: OutboundPoll) => { promise = promise.then(() => native.sendPoll(message.roomId, poll)); return sendCtx; }
-        } as unknown as SendContext;
-        return sendCtx;
-      })(),
-      reply: (() => {
-        let promise = Promise.resolve();
-        const replyCtx: ReplyContext = {
-          then: (onfulfilled: any, onrejected: any) => promise.then(onfulfilled, onrejected),
-          catch: (onrejected: any) => promise.catch(onrejected),
-          finally: (onfinally: any) => promise.finally(onfinally),
-          get [Symbol.toStringTag]() { return "Promise" },
-          message: (body: string) => { promise = promise.then(() => native.replyText(message.roomId, message.eventId, body)); return replyCtx; },
-          text: (body: string) => replyCtx.message(body),
-          markdown: (body: string) => { promise = promise.then(() => native.replyMarkdown(message.roomId, message.eventId, body)); return replyCtx; }
-        } as unknown as ReplyContext;
-        return replyCtx;
-      })(),
-      downloadMedia: (target) => {
+      send: createSendContext(native, message.roomId, Promise.resolve()),
+      reply: createReplyContext(native, message.roomId, message.eventId, Promise.resolve()),
+      downloadMedia: (target?: MediaDownloadTarget) => {
         const resolvedTarget = resolveMediaDownloadTarget(target, message)
         return native.downloadMedia(resolvedTarget.roomId, resolvedTarget.eventId)
       },
+      closePoll: async (pollEventId: string, fallbackText?: string) => {
+        return native.closePoll(message.roomId, pollEventId, fallbackText)
+      },
+      session,
+      prompt: async (body: string, options?: { timeoutMs?: number }) => {
+        await native.sendText(message.roomId, body)
+        return this.createPrompt(message.roomId, message.sender, options?.timeoutMs)
+      }
     }
   }
 
-  
   private async handleError(context: MatrixErrorContext): Promise<void> {
     try {
       await this.errorHandler(context)
@@ -833,13 +1125,20 @@ export class MatrixBot {
   }
 }
 
+/**
+ * Represents a listener that responds to specific events, such as incoming messages, 
+ * scheduled triggers, or external webhooks.
+ */
 export class Listener<TConfig extends ListenerConfig = ListenerConfig> {
   readonly name: string
   readonly description?: string
   readonly triggers: NormalizedListenerTrigger[]
   readonly config: TConfig
   readonly native
-  private handler?: ListenerHandler
+  private pipeline?: {
+    middleware: ListenerMiddleware[]
+    handler: ListenerHandler
+  }
 
   constructor(options: ListenerOptions<TConfig>) {
     assertPresent("name", options.name)
@@ -852,17 +1151,17 @@ export class Listener<TConfig extends ListenerConfig = ListenerConfig> {
       : undefined
   }
 
-  use(handler: ListenerHandler): this {
-    this.handler = handler
+  use(...pipeline: [...ListenerMiddleware[], ListenerHandler]): this {
+    this.pipeline = createListenerPipeline(pipeline)
     return this
   }
 
   async dispatch(event: ListenerEvent, actions: ListenerActions): Promise<number> {
-    if (!this.handler || !this.matches(event)) {
+    if (!this.pipeline || !this.matches(event)) {
       return 0
     }
 
-    await this.handler(event, actions)
+    await runListenerPipeline(event, actions, this.pipeline.middleware, this.pipeline.handler)
     return 1
   }
 
@@ -878,6 +1177,10 @@ export class Listener<TConfig extends ListenerConfig = ListenerConfig> {
   }
 }
 
+/**
+ * Represents a group of commands. Command groups can have their own middleware 
+ * and can act as sub-bots by mounting child commands.
+ */
 export class CommandGroup<TConfig extends CommandGroupConfig = CommandGroupConfig> {
   readonly name: string
   readonly commands: string[]
@@ -979,6 +1282,10 @@ export class CommandGroup<TConfig extends CommandGroupConfig = CommandGroupConfi
       return false
     }
 
+    if (this.adminOnly && !ctx.sender.isAdmin(ctx.sender.id)) return false
+    if (this.moderatorOnly && !ctx.sender.isModerator(ctx.sender.id)) return false
+    if (this.roomType === "direct" && !ctx.room.isDirect) return false
+
     return this.childCommands.some((command) => command.willHandle(scopedCtx))
       || this.pipeline !== undefined
   }
@@ -997,6 +1304,9 @@ export class CommandGroup<TConfig extends CommandGroupConfig = CommandGroupConfi
   }
 }
 
+/**
+ * Represents a single command or micro-bot that can be triggered by specific chat messages.
+ */
 export class Command<TConfig extends CommandConfig = CommandConfig> {
   readonly name: string
   readonly commands: string[]
@@ -1042,7 +1352,14 @@ export class Command<TConfig extends CommandConfig = CommandConfig> {
   }
 
   willHandle(ctx: Context): boolean {
-    return this.pipeline !== undefined && scopeByCommand(ctx, this.commands) !== undefined
+    const scopedCtx = scopeByCommand(ctx, this.commands)
+    if (!scopedCtx) return false
+    
+    if (this.adminOnly && !ctx.sender.isAdmin(ctx.sender.id)) return false
+    if (this.moderatorOnly && !ctx.sender.isModerator(ctx.sender.id)) return false
+    if (this.roomType === "direct" && !ctx.room.isDirect) return false
+
+    return this.pipeline !== undefined
   }
 }
 
@@ -1178,8 +1495,8 @@ function arrayFromOptionalValue(value?: string | string[]): string[] | undefined
   return Array.isArray(value) ? value : [value]
 }
 
-function assertPresent(field: string, value: string): void {
-  if (!value || value.trim().length === 0) {
+function assertPresent(field: string, value: string | string[]): void {
+  if (!value || (typeof value === "string" ? value.trim().length === 0 : value.length === 0)) {
     throw new Error(`${field} is required`)
   }
 }
@@ -1201,7 +1518,7 @@ function toNativeOptions(options: MatrixBotOptions): {
   password: string
   recoveryKey: string
   dataDir?: string
-  admin?: string[]
+  admin: string[]
   moderator?: string[]
   timeline_limit?: number
 } {
@@ -1366,6 +1683,20 @@ function createPipeline(pipeline: Array<Middleware | Handler>): {
   }
 }
 
+function createListenerPipeline(pipeline: Array<ListenerMiddleware | ListenerHandler>): {
+  middleware: ListenerMiddleware[]
+  handler: ListenerHandler
+} {
+  if (pipeline.length === 0) {
+    throw new Error("handler is required")
+  }
+
+  return {
+    middleware: pipeline.slice(0, -1) as ListenerMiddleware[],
+    handler: pipeline[pipeline.length - 1] as ListenerHandler,
+  }
+}
+
 function scopeByCommand(ctx: Context, commands: string[]): Context | undefined {
   const remainder = commandRemainder(ctx.message.body, commands)
   if (remainder === undefined) {
@@ -1485,6 +1816,32 @@ async function runPipeline(
   await dispatch(0)
 }
 
+async function runListenerPipeline(
+  event: ListenerEvent,
+  actions: ListenerActions,
+  middleware: ListenerMiddleware[],
+  handler: ListenerHandler,
+): Promise<void> {
+  let index = -1
+
+  async function dispatch(position: number): Promise<void> {
+    if (position <= index) {
+      throw new Error("next() called multiple times")
+    }
+    index = position
+
+    const layer = middleware[position]
+    if (!layer) {
+      await handler(event, actions)
+      return
+    }
+
+    await layer(event, actions, () => dispatch(position + 1))
+  }
+
+  await dispatch(0)
+}
+
 const nativeBinding = loadNativeBinding()
 
 const contentTypesByExtension: Record<string, string> = {
@@ -1536,18 +1893,24 @@ function defaultLogger(event: MatrixLogEvent): void {
   if (event.level === "debug") {
     return
   }
-
-  const line = JSON.stringify({
-    ts: new Date().toISOString(),
-    ...event,
-  })
-
+  const prefix = `[${event.level.toUpperCase()}]`
+  const context: string[] = []
+  if (event.component) context.push(`component=${event.component}`)
+  if (event.eventId) context.push(`event=${event.eventId}`)
+  if (event.roomId) context.push(`room=${event.roomId}`)
+  if (event.sender) context.push(`sender=${event.sender}`)
+  if (event.handled !== undefined) context.push(`handled=${event.handled}`)
+  if (event.durationMs !== undefined) context.push(`duration=${event.durationMs}ms`)
+  
+  const contextStr = context.length > 0 ? ` (${context.join(", ")})` : ""
+  
   if (event.level === "error") {
-    console.error(line)
+    console.error(`${prefix} ${event.message}${contextStr}`)
+    if (event.error) console.error(event.error)
   } else if (event.level === "warn") {
-    console.warn(line)
+    console.warn(`${prefix} ${event.message}${contextStr}`)
   } else {
-    console.info(line)
+    console.log(`${prefix} ${event.message}${contextStr}`)
   }
 }
 
@@ -1555,6 +1918,53 @@ function errorToString(error: unknown): string {
   if (error instanceof Error) {
     return error.stack ?? error.message
   }
-
   return String(error)
+}
+
+function createSendContext(native: any, roomId: string, promise: Promise<any>): SendContext {
+  const sendCtx: any = {
+    catch: (onrejected: any) => promise.catch(onrejected),
+    finally: (onfinally: any) => promise.finally(onfinally),
+    get [Symbol.toStringTag]() { return "Promise" },
+    message: (body: string) => createSendContext(native, roomId, promise.then(() => native.sendText(roomId, body))),
+    text: (body: string) => sendCtx.message(body),
+    markdown: (body: string) => createSendContext(native, roomId, promise.then(() => native.sendMarkdown(roomId, body))),
+    media: (kind: MediaKind, attachment: MediaAttachment) => createSendContext(native, roomId, promise.then(async () => {
+      const normalized = await normalizeMediaAttachment(attachment, kind)
+      if (kind === "image") await native.sendImage(roomId, normalized)
+      else if (kind === "video") await native.sendVideo(roomId, normalized)
+      else await native.sendFile(roomId, normalized)
+    })),
+    image: (attachment: MediaAttachment) => createSendContext(native, roomId, promise.then(async () => {
+      await native.sendImage(roomId, await normalizeMediaAttachment(attachment, "image"))
+    })),
+    file: (attachment: MediaAttachment) => createSendContext(native, roomId, promise.then(async () => {
+      await native.sendFile(roomId, await normalizeMediaAttachment(attachment, "file"))
+    })),
+    video: (attachment: MediaAttachment) => createSendContext(native, roomId, promise.then(async () => {
+      await native.sendVideo(roomId, await normalizeMediaAttachment(attachment, "video"))
+    })),
+    poll: (poll: OutboundPoll) => createSendContext(native, roomId, promise.then(() => native.sendPoll(roomId, {
+      question: poll.question,
+      answers: poll.answers,
+      kind: poll.kind === "undisclosed" ? "org.matrix.msc3381.poll.undisclosed" : poll.kind === "disclosed" ? "org.matrix.msc3381.poll.disclosed" : undefined,
+      maxSelections: poll.maxSelections,
+      actionId: poll.actionId,
+    })))
+  };
+  Object.defineProperty(sendCtx, "then", { value: (onfulfilled: any, onrejected: any) => promise.then(onfulfilled, onrejected) });
+  return sendCtx as SendContext;
+}
+
+function createReplyContext(native: any, roomId: string, eventId: string, promise: Promise<any>): ReplyContext {
+  const replyCtx: any = {
+    catch: (onrejected: any) => promise.catch(onrejected),
+    finally: (onfinally: any) => promise.finally(onfinally),
+    get [Symbol.toStringTag]() { return "Promise" },
+    message: (body: string) => createReplyContext(native, roomId, eventId, promise.then(() => native.replyText(roomId, eventId, body))),
+    text: (body: string) => replyCtx.message(body),
+    markdown: (body: string) => createReplyContext(native, roomId, eventId, promise.then(() => native.replyMarkdown(roomId, eventId, body)))
+  };
+  Object.defineProperty(replyCtx, "then", { value: (onfulfilled: any, onrejected: any) => promise.then(onfulfilled, onrejected) });
+  return replyCtx as ReplyContext;
 }
