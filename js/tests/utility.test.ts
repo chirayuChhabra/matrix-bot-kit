@@ -74,7 +74,6 @@ describe("MatrixBot Utility Commands", () => {
 		});
 
 		process.env.MAINTENANCE_PASSWORD = "secret_password";
-		// @ts-expect-error
 		if (typeof Bun !== "undefined")
 			Bun.env.MAINTENANCE_PASSWORD = "secret_password";
 

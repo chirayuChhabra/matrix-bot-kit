@@ -489,7 +489,6 @@ export class MatrixBot {
 			"Toggles maintenance mode.",
 			async (ctx) => {
 				const password = ctx.message.body.trim();
-				// @ts-expect-error
 				const expectedPassword =
 					typeof Bun !== "undefined"
 						? Bun.env.MAINTENANCE_PASSWORD
@@ -514,7 +513,6 @@ export class MatrixBot {
 			"Shuts down the bot gracefully.",
 			async (ctx) => {
 				const password = ctx.message.body.trim();
-				// @ts-expect-error
 				const expectedPassword =
 					typeof Bun !== "undefined"
 						? Bun.env.MAINTENANCE_PASSWORD
