@@ -48,6 +48,7 @@ describe("MatrixBot Utility Commands", () => {
       username: "bot",
       password: "123",
       recoveryKey: "abc",
+      admin: ["@admin:example.org"],
       config: { utility: true }
     })
 
@@ -66,6 +67,7 @@ describe("MatrixBot Utility Commands", () => {
       username: "bot",
       password: "123",
       recoveryKey: "abc",
+      admin: ["@admin:example.org"],
       config: { utility: true }
     })
     

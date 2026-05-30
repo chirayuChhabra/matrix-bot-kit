@@ -49,6 +49,7 @@ describe("MatrixBot Fluent API", () => {
       username: "user",
       password: "password",
       recoveryKey: "key",
+      admin: ["@admin:example.com"],
     })
 
     bot.command("!ping", async (ctx) => {
@@ -66,6 +67,7 @@ describe("MatrixBot Fluent API", () => {
       username: "user",
       password: "password",
       recoveryKey: "key",
+      admin: ["@admin:example.com"],
     })
 
     const group = bot.group("!admin")
@@ -84,9 +86,10 @@ describe("MatrixBot Fluent API", () => {
       username: "user",
       password: "password",
       recoveryKey: "key",
+      admin: ["@admin:example.com"],
     })
 
-    bot.on("message", async (ctx) => {
+    bot.on.message(async (ctx) => {
       called = true
     })
 
@@ -110,6 +113,7 @@ describe("MatrixBot Fluent API", () => {
       username: "user",
       password: "password",
       recoveryKey: "key",
+      admin: ["@admin:example.com"],
     })
 
     bot.command(

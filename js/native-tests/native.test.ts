@@ -7,6 +7,7 @@ test("native binding registers sub-bots", () => {
     username: "@bot:example.org",
     password: "secret",
     recoveryKey: "recovery",
+    admin: ["@admin:example.org"],
   })
   const commandGroup = new CommandGroup({ name: "factcheck", command: "!check" })
 
@@ -23,6 +24,7 @@ test("native binding registers ajents", () => {
     username: "@bot:example.org",
     password: "secret",
     recoveryKey: "recovery",
+    admin: ["@admin:example.org"],
   })
   const listener = new Listener({
     name: "watcher",
@@ -42,6 +44,7 @@ test("native-backed wrapper exposes listen prerequisites", async () => {
     username: "@bot:example.org",
     password: "secret",
     recoveryKey: "recovery",
+    admin: ["@admin:example.org"],
   })
 
   expect(bot.nativeAvailable).toBe(true)
