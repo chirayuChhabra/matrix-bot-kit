@@ -2,3 +2,4 @@
 /.devbox/
 /js/native/*.node
 /node_modules/
+/.matrix-bot-sdk/
