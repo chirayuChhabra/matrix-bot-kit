@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use matrix_bot_core::{IncomingMessage, MediaMessage, PollAnswer, PollMessage, RepliedMessage};
+use matrix_bot_core::{
+    IncomingMessage, MediaMessage, PollAnswer, PollEndMessage, PollMessage, PollResponseMessage,
+    RepliedMessage,
+};
 use matrix_sdk::{
     Room,
     media::{MediaFormat, MediaRequestParameters},
@@ -14,6 +17,10 @@ use matrix_sdk::{
                     OriginalSyncUnstablePollStartEvent, UnstablePollStartContentBlock,
                     UnstablePollStartEventContent,
                 },
+                response::OriginalSyncPollResponseEvent,
+                unstable_response::OriginalSyncUnstablePollResponseEvent,
+                end::OriginalSyncPollEndEvent,
+                unstable_end::OriginalSyncUnstablePollEndEvent,
             },
             room::MediaSource,
             room::message::{
@@ -93,6 +100,94 @@ pub fn incoming_unstable_poll_from_event(
         .with_message_type("poll")
         .with_poll(poll),
     )
+}
+
+pub fn incoming_poll_response_from_event(
+    event: &OriginalSyncPollResponseEvent,
+    room: &Room,
+) -> IncomingMessage {
+    let selections: Vec<String> = event
+        .content
+        .selections
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let poll_event_id = event.content.relates_to.event_id.to_string();
+    IncomingMessage::new(
+        event.event_id.to_string(),
+        room.room_id().to_string(),
+        event.sender.to_string(),
+        String::new(),
+    )
+    .with_message_type("poll_response")
+    .with_poll_response(PollResponseMessage {
+        poll_event_id,
+        selections,
+    })
+}
+
+pub fn incoming_unstable_poll_response_from_event(
+    event: &OriginalSyncUnstablePollResponseEvent,
+    room: &Room,
+) -> IncomingMessage {
+    let selections: Vec<String> = event
+        .content
+        .poll_response
+        .answers
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let poll_event_id = event.content.relates_to.event_id.to_string();
+    IncomingMessage::new(
+        event.event_id.to_string(),
+        room.room_id().to_string(),
+        event.sender.to_string(),
+        String::new(),
+    )
+    .with_message_type("poll_response")
+    .with_poll_response(PollResponseMessage {
+        poll_event_id,
+        selections,
+    })
+}
+
+pub fn incoming_poll_end_from_event(
+    event: &OriginalSyncPollEndEvent,
+    room: &Room,
+) -> IncomingMessage {
+    let poll_event_id = event.content.relates_to.event_id.to_string();
+    let text = event.content.text.clone();
+    let text_plain = text.find_plain().unwrap_or_default().to_owned();
+    IncomingMessage::new(
+        event.event_id.to_string(),
+        room.room_id().to_string(),
+        event.sender.to_string(),
+        text_plain.clone(),
+    )
+    .with_message_type("poll_end")
+    .with_poll_end(PollEndMessage {
+        poll_event_id,
+        text: text_plain,
+    })
+}
+
+pub fn incoming_unstable_poll_end_from_event(
+    event: &OriginalSyncUnstablePollEndEvent,
+    room: &Room,
+) -> IncomingMessage {
+    let poll_event_id = event.content.relates_to.event_id.to_string();
+    let text = event.content.text.clone();
+    IncomingMessage::new(
+        event.event_id.to_string(),
+        room.room_id().to_string(),
+        event.sender.to_string(),
+        text.clone(),
+    )
+    .with_message_type("poll_end")
+    .with_poll_end(PollEndMessage {
+        poll_event_id,
+        text,
+    })
 }
 
 pub async fn download_media_from_room_event(

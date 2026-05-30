@@ -11,8 +11,8 @@ pub use listener::{Listener, ListenerMatrixMessageTrigger, ListenerTrigger};
 pub use bot::MatrixBot;
 pub use config::MatrixBotConfig;
 pub use context::{
-    IncomingMessage, MatrixContext, MediaMessage, PollAnswer, PollMessage, RepliedMessage,
-    ReplyTarget,
+    IncomingMessage, MatrixContext, MediaMessage, PollAnswer, PollEndMessage, PollMessage,
+    PollResponseMessage, RepliedMessage, ReplyTarget,
 };
 pub use dispatch::{
     ListenerDispatchPlan, ListenerDispatchRoute, DispatchPlan, DispatchRoute, DispatchStep,

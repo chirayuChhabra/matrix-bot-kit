@@ -9,6 +9,9 @@ use matrix_sdk::{
                 NewUnstablePollStartEventContent, UnstablePollAnswer, UnstablePollAnswers,
                 UnstablePollStartContentBlock, UnstablePollStartEventContent,
             },
+            poll::unstable_end::UnstablePollEndEventContent,
+            reaction::ReactionEventContent,
+            relation::Annotation,
             room::message::{RoomMessageEventContent, RoomMessageEventContentWithoutRelation},
         },
     },
@@ -35,6 +38,9 @@ pub struct MediaAttachment {
 pub struct Poll {
     pub question: String,
     pub answers: Vec<PollOption>,
+    pub kind: Option<String>,
+    pub max_selections: Option<u64>,
+    pub action_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +87,7 @@ pub async fn send_media_attachment(room: &Room, attachment: MediaAttachment) -> 
     Ok(())
 }
 
-pub async fn send_poll(room: &Room, poll: Poll) -> RuntimeResult<()> {
+pub async fn send_poll(room: &Room, poll: Poll) -> RuntimeResult<String> {
     let answers: UnstablePollAnswers = poll
         .answers
         .into_iter()
@@ -98,10 +104,49 @@ pub async fn send_poll(room: &Room, poll: Poll) -> RuntimeResult<()> {
             .collect::<Vec<_>>()
             .join("\n")
     );
-    let poll_start = UnstablePollStartContentBlock::new(poll.question, answers);
+    let mut poll_start = UnstablePollStartContentBlock::new(poll.question, answers);
+
+    if let Some(kind) = poll.kind {
+        use matrix_sdk::ruma::events::poll::start::PollKind;
+        poll_start.kind = match kind.as_str() {
+            "m.undisclosed" | "org.matrix.msc3381.poll.undisclosed" | "undisclosed" => PollKind::Undisclosed,
+            _ => PollKind::Disclosed,
+        };
+    }
+
+    if let Some(max_selections) = poll.max_selections {
+        use matrix_sdk::ruma::UInt;
+        if let Some(max) = UInt::try_from(max_selections).ok() {
+            poll_start.max_selections = max;
+        }
+    }
+
     let content = UnstablePollStartEventContent::New(NewUnstablePollStartEventContent::plain_text(
         fallback, poll_start,
     ));
+
+    let mut json_val = serde_json::to_value(&content)
+        .map_err(|e| crate::MatrixRuntimeError::Event(e.to_string()))?;
+    
+    if let Some(action_id) = poll.action_id {
+        if let Some(obj) = json_val.as_object_mut() {
+            obj.insert(String::from("org.matrix.custom.action_id"), serde_json::json!(action_id));
+        }
+    }
+
+    let response = room.send_raw("org.matrix.msc3381.poll.start", json_val).await?;
+    Ok(response.event_id.to_string())
+}
+
+pub async fn close_poll(
+    room: &Room,
+    poll_event_id: OwnedEventId,
+    fallback_text: String,
+) -> RuntimeResult<()> {
+    let content = UnstablePollEndEventContent::new(
+        fallback_text,
+        poll_event_id,
+    );
 
     room.send(content).await?;
     Ok(())
@@ -148,5 +193,26 @@ async fn send_reply(
         }
     }
 
+    Ok(())
+}
+
+pub async fn send_reaction(
+    room: &Room,
+    event_id: OwnedEventId,
+    key: impl Into<String>,
+) -> RuntimeResult<()> {
+    room.send(ReactionEventContent::new(Annotation::new(event_id, key.into())))
+        .await?;
+    Ok(())
+}
+
+pub async fn redact(
+    room: &Room,
+    event_id: &OwnedEventId,
+    reason: Option<&str>,
+) -> RuntimeResult<()> {
+    room.redact(event_id, reason, None)
+        .await
+        .map_err(|e| crate::MatrixRuntimeError::Event(e.to_string()))?;
     Ok(())
 }

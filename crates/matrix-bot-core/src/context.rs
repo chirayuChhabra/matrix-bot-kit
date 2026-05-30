@@ -7,6 +7,8 @@ pub struct IncomingMessage {
     pub body: String,
     pub media: Option<MediaMessage>,
     pub poll: Option<PollMessage>,
+    pub poll_response: Option<PollResponseMessage>,
+    pub poll_end: Option<PollEndMessage>,
     pub reply_target: ReplyTarget,
     pub is_direct: bool,
 }
@@ -26,6 +28,8 @@ impl IncomingMessage {
             body: body.into(),
             media: None,
             poll: None,
+            poll_response: None,
+            poll_end: None,
             reply_target: ReplyTarget::NoReply,
             is_direct: false,
         }
@@ -48,6 +52,16 @@ impl IncomingMessage {
 
     pub fn with_poll(mut self, poll: PollMessage) -> Self {
         self.poll = Some(poll);
+        self
+    }
+
+    pub fn with_poll_response(mut self, poll_response: PollResponseMessage) -> Self {
+        self.poll_response = Some(poll_response);
+        self
+    }
+
+    pub fn with_poll_end(mut self, poll_end: PollEndMessage) -> Self {
+        self.poll_end = Some(poll_end);
         self
     }
 
@@ -89,6 +103,18 @@ pub struct PollMessage {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PollAnswer {
     pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollResponseMessage {
+    pub poll_event_id: String,
+    pub selections: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollEndMessage {
+    pub poll_event_id: String,
     pub text: String,
 }
 

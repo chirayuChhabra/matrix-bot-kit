@@ -17,7 +17,7 @@ impl std::fmt::Display for MatrixBotError {
                 write!(formatter, "a sub-bot named `{name}` is already registered")
             }
             Self::DuplicateListener { name } => {
-                write!(formatter, "an listener named `{name}` is already registered")
+                write!(formatter, "a listener named `{name}` is already registered")
             }
         }
     }

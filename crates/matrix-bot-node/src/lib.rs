@@ -7,8 +7,11 @@ use matrix_bot_core::{
 use matrix_bot_runtime::{
     MatrixRuntime, MediaAttachment, MediaAttachmentKind, Poll, PollOption, SyncLoopOptions,
     download_media_from_room_event, incoming_message_from_room_event, incoming_poll_from_event,
-    incoming_unstable_poll_from_event, send_markdown_notice, send_markdown_reply,
-    send_media_attachment, send_plain_notice, send_plain_reply, send_poll,
+    incoming_unstable_poll_from_event, incoming_poll_response_from_event,
+    incoming_unstable_poll_response_from_event, incoming_poll_end_from_event,
+    incoming_unstable_poll_end_from_event, send_markdown_notice, send_markdown_reply,
+    send_media_attachment, send_plain_notice, send_plain_reply, send_poll, close_poll,
+    send_reaction, redact,
 };
 use matrix_sdk::{
     Client, Room, RoomState,
@@ -18,6 +21,10 @@ use matrix_sdk::{
             poll::{
                 start::OriginalSyncPollStartEvent,
                 unstable_start::OriginalSyncUnstablePollStartEvent,
+                response::OriginalSyncPollResponseEvent,
+                unstable_response::OriginalSyncUnstablePollResponseEvent,
+                end::OriginalSyncPollEndEvent,
+                unstable_end::OriginalSyncUnstablePollEndEvent,
             },
             room::member::StrippedRoomMemberEvent,
             room::message::OriginalSyncRoomMessageEvent,
@@ -71,6 +78,8 @@ pub struct NativeIncomingMessage {
     pub body: String,
     pub media: Option<NativeMediaMessage>,
     pub poll: Option<NativePollMessage>,
+    pub poll_response: Option<NativePollResponseMessage>,
+    pub poll_end: Option<NativePollEndMessage>,
     pub replied_message: Option<NativeRepliedMessage>,
     pub reply_unsupported: bool,
     pub is_direct: bool,
@@ -130,6 +139,21 @@ pub struct NativeMediaAttachment {
 pub struct NativePoll {
     pub question: String,
     pub answers: Vec<NativePollAnswer>,
+    pub kind: Option<String>,
+    pub max_selections: Option<i64>,
+    pub action_id: Option<String>,
+}
+
+#[napi(object)]
+pub struct NativePollResponseMessage {
+    pub poll_event_id: String,
+    pub selections: Vec<String>,
+}
+
+#[napi(object)]
+pub struct NativePollEndMessage {
+    pub poll_event_id: String,
+    pub text: String,
 }
 
 #[napi]
@@ -337,7 +361,16 @@ impl MatrixBot {
     }
 
     #[napi]
-    pub async fn send_poll(&self, room_id: String, poll: NativePoll) -> Result<()> {
+    pub async fn get_event(&self, room_id: String, event_id: String) -> Result<String> {
+        let room = self.room(room_id)?;
+        use matrix_sdk::ruma::EventId;
+        let event_id = EventId::parse(&event_id).map_err(|e| napi::Error::new(napi::Status::InvalidArg, e.to_string()))?;
+        let event = room.event(&event_id, None).await.map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
+        Ok(event.raw().json().get().to_string())
+    }
+
+    #[napi]
+    pub async fn send_poll(&self, room_id: String, poll: NativePoll) -> Result<String> {
         let room = self.room(room_id)?;
         send_poll(
             &room,
@@ -351,7 +384,27 @@ impl MatrixBot {
                         text: answer.text,
                     })
                     .collect(),
+                kind: poll.kind,
+                max_selections: poll.max_selections.and_then(|v| u64::try_from(v).ok()),
+                action_id: poll.action_id,
             },
+        )
+        .await
+        .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub async fn close_poll(
+        &self,
+        room_id: String,
+        poll_event_id: String,
+        fallback_text: Option<String>,
+    ) -> Result<()> {
+        let room = self.room(room_id)?;
+        close_poll(
+            &room,
+            owned_event_id(poll_event_id)?,
+            fallback_text.unwrap_or_else(|| "The poll has ended.".to_owned()),
         )
         .await
         .map_err(to_napi_error)
@@ -376,6 +429,18 @@ impl MatrixBot {
         send_markdown_reply(&room, owned_event_id(event_id)?, body)
             .await
             .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub async fn react(&self, room_id: String, event_id: String, emoji: String) -> Result<()> {
+        let room = self.room(room_id)?;
+        send_reaction(&room, owned_event_id(event_id)?, emoji).await.map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub async fn redact(&self, room_id: String, event_id: String, reason: Option<String>) -> Result<()> {
+        let room = self.room(room_id)?;
+        redact(&room, &owned_event_id(event_id)?, reason.as_deref()).await.map_err(to_napi_error)
     }
 
     #[napi]
@@ -560,7 +625,35 @@ fn register_event_handlers(
         callback.clone(),
         logger.clone(),
     );
-    register_unstable_poll_handler(client, command_groups, listeners, callback, logger);
+    register_unstable_poll_handler(
+        client.clone(),
+        command_groups.clone(),
+        listeners.clone(),
+        callback.clone(),
+        logger.clone(),
+    );
+    register_poll_response_handler(
+        client.clone(),
+        command_groups.clone(),
+        listeners.clone(),
+        callback.clone(),
+        logger.clone(),
+    );
+    register_unstable_poll_response_handler(
+        client.clone(),
+        command_groups.clone(),
+        listeners.clone(),
+        callback.clone(),
+        logger.clone(),
+    );
+    register_poll_end_handler(
+        client.clone(),
+        command_groups.clone(),
+        listeners.clone(),
+        callback.clone(),
+        logger.clone(),
+    );
+    register_unstable_poll_end_handler(client, command_groups, listeners, callback, logger);
 }
 
 fn register_message_handler(
@@ -687,6 +780,162 @@ fn register_unstable_poll_handler(
     );
 }
 
+fn register_poll_response_handler(
+    client: Client,
+    command_groups: Arc<Vec<CoreCommandGroup>>,
+    listeners: Arc<Vec<CoreListener>>,
+    callback: Arc<MessageCallback>,
+    logger: RuntimeLogger,
+) {
+    client.add_event_handler(
+        move |event: OriginalSyncPollResponseEvent, room: Room, client: Client| {
+            let callback = Arc::clone(&callback);
+            let logger = logger.clone();
+            async move {
+                if room.state() != RoomState::Joined {
+                    return;
+                }
+
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
+                    return;
+                }
+
+                let message = incoming_poll_response_from_event(&event, &room);
+                let bot_user_id = client
+                    .user_id()
+                    .expect("logged in client")
+                    .as_str()
+                    .to_owned();
+                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
+                    return;
+                }
+
+                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
+                emit_runtime_log(&logger, "debug", "dispatched poll response event to JavaScript");
+            }
+        },
+    );
+}
+
+fn register_unstable_poll_response_handler(
+    client: Client,
+    command_groups: Arc<Vec<CoreCommandGroup>>,
+    listeners: Arc<Vec<CoreListener>>,
+    callback: Arc<MessageCallback>,
+    logger: RuntimeLogger,
+) {
+    client.add_event_handler(
+        move |event: OriginalSyncUnstablePollResponseEvent, room: Room, client: Client| {
+            let callback = Arc::clone(&callback);
+            let logger = logger.clone();
+            async move {
+                if room.state() != RoomState::Joined {
+                    return;
+                }
+
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
+                    return;
+                }
+
+                let message = incoming_unstable_poll_response_from_event(&event, &room);
+                let bot_user_id = client
+                    .user_id()
+                    .expect("logged in client")
+                    .as_str()
+                    .to_owned();
+                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
+                    return;
+                }
+
+                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
+                emit_runtime_log(
+                    &logger,
+                    "debug",
+                    "dispatched unstable poll response event to JavaScript",
+                );
+            }
+        },
+    );
+}
+
+fn register_poll_end_handler(
+    client: Client,
+    command_groups: Arc<Vec<CoreCommandGroup>>,
+    listeners: Arc<Vec<CoreListener>>,
+    callback: Arc<MessageCallback>,
+    logger: RuntimeLogger,
+) {
+    client.add_event_handler(
+        move |event: OriginalSyncPollEndEvent, room: Room, client: Client| {
+            let callback = Arc::clone(&callback);
+            let logger = logger.clone();
+            async move {
+                if room.state() != RoomState::Joined {
+                    return;
+                }
+
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
+                    return;
+                }
+
+                let message = incoming_poll_end_from_event(&event, &room);
+                let bot_user_id = client
+                    .user_id()
+                    .expect("logged in client")
+                    .as_str()
+                    .to_owned();
+                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
+                    return;
+                }
+
+                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
+                emit_runtime_log(&logger, "debug", "dispatched poll end event to JavaScript");
+            }
+        },
+    );
+}
+
+fn register_unstable_poll_end_handler(
+    client: Client,
+    command_groups: Arc<Vec<CoreCommandGroup>>,
+    listeners: Arc<Vec<CoreListener>>,
+    callback: Arc<MessageCallback>,
+    logger: RuntimeLogger,
+) {
+    client.add_event_handler(
+        move |event: OriginalSyncUnstablePollEndEvent, room: Room, client: Client| {
+            let callback = Arc::clone(&callback);
+            let logger = logger.clone();
+            async move {
+                if room.state() != RoomState::Joined {
+                    return;
+                }
+
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
+                    return;
+                }
+
+                let message = incoming_unstable_poll_end_from_event(&event, &room);
+                let bot_user_id = client
+                    .user_id()
+                    .expect("logged in client")
+                    .as_str()
+                    .to_owned();
+                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
+                    return;
+                }
+
+                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
+                emit_runtime_log(
+                    &logger,
+                    "debug",
+                    "dispatched unstable poll end event to JavaScript",
+                );
+            }
+        },
+    );
+}
+
 fn owned_event_id(event_id: String) -> Result<OwnedEventId> {
     OwnedEventId::try_from(event_id).map_err(to_napi_error)
 }
@@ -738,6 +987,14 @@ impl From<IncomingMessage> for NativeIncomingMessage {
                         text: answer.text,
                     })
                     .collect(),
+            }),
+            poll_response: message.poll_response.map(|pr| NativePollResponseMessage {
+                poll_event_id: pr.poll_event_id,
+                selections: pr.selections,
+            }),
+            poll_end: message.poll_end.map(|pe| NativePollEndMessage {
+                poll_event_id: pe.poll_event_id,
+                text: pe.text,
             }),
             replied_message,
             reply_unsupported,
