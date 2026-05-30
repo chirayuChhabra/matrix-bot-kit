@@ -1,33 +1,15 @@
 {
-  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.0/.schema/devbox.schema.json",
-  "packages": [
-    "rustc@latest",
-    "cargo@latest",
-    "bun@latest"
-  ],
-  "shell": {
-    "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
-    ],
-    "scripts": {
-      "fmt": [
-        "cargo fmt --all"
-      ],
-      "test": [
-        "cargo test --workspace"
-      ],
-      "test-js": [
-        "bun test js/tests"
-      ],
-      "build-native": [
-        "bash scripts/build-native.sh"
-      ],
-      "test-native": [
-        "bun test js/native-tests"
-      ],
-      "example": [
-        "bun examples/ping-bot.ts"
-      ]
-    }
-  }
+	"$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.0/.schema/devbox.schema.json",
+	"packages": ["rustc@latest", "cargo@latest", "bun@latest"],
+	"shell": {
+		"init_hook": ["echo 'Welcome to devbox!' > /dev/null"],
+		"scripts": {
+			"fmt": ["cargo fmt --all"],
+			"test": ["cargo test --workspace"],
+			"test-js": ["bun test js/tests"],
+			"build-native": ["bash scripts/build-native.sh"],
+			"test-native": ["bun test js/native-tests"],
+			"example": ["bun examples/ping-bot.ts"]
+		}
+	}
 }
