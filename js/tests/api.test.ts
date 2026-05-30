@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../src/index";
 
+// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 function createMockContext(overrides: any = {}): Context {
 	const body = overrides.body ?? "hello";
 	const msgOverrides = overrides.message ?? {};
@@ -38,6 +39,7 @@ function createMockContext(overrides: any = {}): Context {
 		},
 		downloadMedia: async () => Buffer.from([]),
 		...overrides,
+		// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 	} as any as Context;
 }
 

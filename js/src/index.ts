@@ -143,6 +143,7 @@ export type Context = {
 	/** Replies to the current message. Chainable methods allow formatted replies. */
 	reply: ReplyContext;
 	/** A persistent key-value store for session data specific to this user in this room. */
+	// biome-ignore lint/suspicious/noExplicitAny: sessions can contain any dynamic data
 	session: Record<string, any>;
 	/** Sends a prompt to the user and waits for their next reply in the room. */
 	prompt: (body: string, options?: { timeoutMs?: number }) => Promise<Context>;
@@ -404,6 +405,7 @@ export class MatrixBot {
 			timer: ReturnType<typeof setTimeout>;
 		}
 	>();
+	// biome-ignore lint/suspicious/noExplicitAny: sessions can contain any dynamic data
 	private sessions = new Map<string, Record<string, any>>();
 
 	constructor(options: MatrixBotOptions) {
@@ -559,6 +561,7 @@ export class MatrixBot {
 			});
 
 			for (const category of sortedCategories) {
+				// biome-ignore lint/style/noNonNullAssertion: guaranteed by Map traversal
 				const groups = categories.get(category)!;
 				doc += `## ${category}\n\n`;
 				doc += "| Command | Description | Badges |\n";
@@ -722,9 +725,11 @@ export class MatrixBot {
 				| EventFilterOptions
 				| ListenerMiddleware
 				| ListenerHandler,
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 			...args: any[]
 		) => {
 			let options: EventFilterOptions = {};
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 			let pipeline: any[] = [];
 
 			if (typeof optionsOrMiddleware === "function") {
@@ -734,6 +739,7 @@ export class MatrixBot {
 				pipeline = args;
 			}
 
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 			const finalPipeline: any[] = [];
 
 			if (options.rooms) {
@@ -772,59 +778,75 @@ export class MatrixBot {
 
 			finalPipeline.push(...pipeline);
 
+			// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 			this.inner_on(eventType, ...(finalPipeline as any));
 		};
 
 		return {
 			message: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("message", opts, ...args),
 			image: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("image", opts, ...args),
 			file: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("file", opts, ...args),
 			video: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("video", opts, ...args),
 			audio: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("audio", opts, ...args),
 			notice: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("notice", opts, ...args),
 			server_notice: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("server_notice", opts, ...args),
 			poll: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("poll", opts, ...args),
 			pollVote: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("poll_response", opts, ...args),
 			pollEnd: (
 				opts: EventFilterOptions | ListenerMiddleware | ListenerHandler,
+				// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 				...args: any[]
 			) => registerEvent("poll_end", opts, ...args),
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 			webhook: (opts: WebhookOptions, ...args: any[]) => {
+				// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 				this.webhook(opts.source, opts.event, ...(args as any));
 			},
+			// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 			schedule: (opts: ScheduleOptions, ...args: any[]) => {
+				// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 				this.schedule(opts, ...(args as any));
 			},
 		};
 	}
 
+	// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 	private inner_on(event: string, ...args: any[]): this {
 		const isRooms =
 			typeof args[0] === "string" ||
@@ -1196,6 +1218,7 @@ export class MatrixBot {
 		if (!this.sessions.has(sessionKey)) {
 			this.sessions.set(sessionKey, {});
 		}
+		// biome-ignore lint/style/noNonNullAssertion: guaranteed by set above if missing
 		const session = this.sessions.get(sessionKey)!;
 
 		let actionId: string | undefined;
@@ -2213,12 +2236,16 @@ function errorToString(error: unknown): string {
 }
 
 function createSendContext(
+	// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 	native: any,
 	roomId: string,
-	promise: Promise<any>,
+	promise: Promise<unknown>,
 ): SendContext {
+	// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 	const sendCtx: any = {
+		// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 		catch: (onrejected: any) => promise.catch(onrejected),
+		// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 		finally: (onfinally: any) => promise.finally(onfinally),
 		get [Symbol.toStringTag]() {
 			return "Promise";
@@ -2310,13 +2337,17 @@ function createSendContext(
 }
 
 function createReplyContext(
+	// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 	native: any,
 	roomId: string,
 	eventId: string,
-	promise: Promise<any>,
+	promise: Promise<unknown>,
 ): ReplyContext {
+	// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 	const replyCtx: any = {
+		// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 		catch: (onrejected: any) => promise.catch(onrejected),
+		// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 		finally: (onfinally: any) => promise.finally(onfinally),
 		get [Symbol.toStringTag]() {
 			return "Promise";

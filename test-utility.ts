@@ -25,6 +25,7 @@ const ctx = {
 };
 
 bot
+	// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 	.dispatch(ctx as any)
 	.then((res) => console.log("handled:", res))
 	.catch(console.error);
@@ -34,6 +35,7 @@ const helpCtx = {
 	message: { ...ctx.message, rawBody: "!help", body: "!help" },
 };
 bot
+	// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 	.dispatch(helpCtx as any)
 	.then((res) => console.log("help handled:", res))
 	.catch(console.error);
@@ -45,6 +47,7 @@ const uptimeCtx = {
 	sender: { ...ctx.sender, isAdmin: () => true },
 };
 bot
+	// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 	.dispatch(uptimeCtx as any)
 	.then((res) => console.log("uptime handled:", res))
 	.catch(console.error);

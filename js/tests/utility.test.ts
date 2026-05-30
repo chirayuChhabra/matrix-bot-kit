@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../src/index";
 
+// biome-ignore lint/suspicious/noExplicitAny: dynamic types
 function createMockContext(overrides: any = {}): Context {
 	const body = overrides.body ?? "hello";
 	const msgOverrides = overrides.message ?? {};
@@ -38,6 +39,7 @@ function createMockContext(overrides: any = {}): Context {
 		},
 		downloadMedia: async () => Buffer.from([]),
 		...overrides,
+		// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 	} as any as Context;
 }
 
@@ -57,6 +59,7 @@ describe("MatrixBot Utility Commands", () => {
 		let replied = "";
 		pingCtx.reply.text = (async (text: string) => {
 			replied = text;
+			// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 		}) as any;
 
 		await bot.dispatch(pingCtx);
@@ -86,6 +89,7 @@ describe("MatrixBot Utility Commands", () => {
 		let replied = "";
 		maintCtx.reply.text = (async (text: string) => {
 			replied = text;
+			// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 		}) as any;
 		await bot.dispatch(maintCtx);
 		expect(replied).toBe("Maintenance mode is now ON.");
@@ -95,6 +99,7 @@ describe("MatrixBot Utility Commands", () => {
 		let pingReplied = "";
 		pingCtx.reply.text = (async (text: string) => {
 			pingReplied = text;
+			// biome-ignore lint/suspicious/noExplicitAny: testing mocks
 		}) as any;
 		await bot.dispatch(pingCtx);
 		expect(pingReplied).toBe("Bot is under maintenance");
