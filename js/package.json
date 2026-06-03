@@ -1,6 +1,6 @@
 {
   "name": "matrix-bot-kit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A modern SDK for creating Matrix bots",
   "author": "Chirayu Chhabra",
   "license": "MIT",
@@ -33,7 +33,7 @@
   ],
   "scripts": {
     "build": "tsup",
-    "build-native": "napi build --platform --release --manifest-path ../crates/matrix-bot-node/Cargo.toml --output-dir ./native",
+    "build-native": "napi build --platform --release --manifest-path ../crates/matrix-bot-node/Cargo.toml --output-dir .",
     "prepack": "devbox run build-js",
     "artifacts": "napi artifacts",
     "prepublishOnly": "napi prepublish -t npm"
