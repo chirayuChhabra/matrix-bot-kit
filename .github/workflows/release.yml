@@ -3,6 +3,7 @@ env:
   DEBUG: napi:*
   APP_NAME: matrix-bot-kit
   MACOSX_DEPLOYMENT_TARGET: '10.13'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
   push:
@@ -40,7 +41,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
@@ -75,7 +76,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install Bun
