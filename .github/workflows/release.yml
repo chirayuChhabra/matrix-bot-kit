@@ -25,6 +25,10 @@ jobs:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             build: cd js && bun run build-native --target x86_64-unknown-linux-gnu
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            setup: sudo apt-get update -y && sudo apt-get install -y gcc-aarch64-linux-gnu
+            build: cd js && CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc bun run build-native --target aarch64-unknown-linux-gnu
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             build: cd js && bun run build-native --target x86_64-pc-windows-msvc
@@ -54,6 +58,10 @@ jobs:
 
       - name: Install dependencies
         run: bun install
+
+      - name: Setup cross-compilation
+        if: ${{ matrix.settings.setup }}
+        run: ${{ matrix.settings.setup }}
 
       - name: Build
         run: ${{ matrix.settings.build }}
