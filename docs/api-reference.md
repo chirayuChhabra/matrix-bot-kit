@@ -11,7 +11,7 @@
 | `admin` | ✅ | Users allowed to invite the bot and use admin-only commands. |
 | `moderator` | ❌ | Users with moderator permissions. |
 | `timelineLimit` | ❌ | Per-room sync backlog cap. Defaults to `20`. |
-| `dataDir` | ❌ | Session, store, and cache directory. Defaults to `.matrix-bot-sdk`. |
+| `dataDir` | ❌ | Session, store, and cache directory. Defaults to `.matrix-bot-kit`. |
 | `config.announceCommandGroupUsage` | ❌ | Sends `> using <group>...` before running a matched group. |
 | `config.selfDocumentation` | ❌ | Writes bot family Markdown when `start()` runs. |
 | `config.utility` | ❌ | Activates built-in maintainer/utility commands. |

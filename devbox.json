@@ -7,6 +7,7 @@
 			"fmt": ["cargo fmt --all"],
 			"test": ["cargo test --workspace"],
 			"test-js": ["bun test js/tests"],
+			"build-js": ["cd js && bun run build"],
 			"build-native": ["bash scripts/build-native.sh"],
 			"test-native": ["bun test js/native-tests"],
 			"example": ["bun examples/ping-bot.ts"]

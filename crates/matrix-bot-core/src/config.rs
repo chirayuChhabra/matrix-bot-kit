@@ -29,7 +29,7 @@ impl MatrixBotConfig {
             username: username.into(),
             password: password.into(),
             recovery_key: recovery_key.into(),
-            data_dir: PathBuf::from(".matrix-bot-sdk"),
+            data_dir: PathBuf::from(".matrix-bot-kit"),
             admin,
             moderator,
             timeline_limit,
@@ -97,6 +97,6 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(config.data_dir, PathBuf::from(".matrix-bot-sdk"));
+        assert_eq!(config.data_dir, PathBuf::from(".matrix-bot-kit"));
     }
 }

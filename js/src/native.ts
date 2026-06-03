@@ -147,6 +147,29 @@ export function loadNativeBinding(): NativeBinding | undefined {
 		const require = createRequire(import.meta.url);
 		return require("../native/matrix_bot_node.node") as NativeBinding;
 	} catch {
-		return undefined;
+		try {
+			const require = createRequire(import.meta.url);
+			const { platform, arch } = process;
+			let pkgName = "";
+			if (platform === "darwin" && arch === "arm64")
+				pkgName = "matrix-bot-kit-darwin-arm64";
+			else if (platform === "darwin" && arch === "x64")
+				pkgName = "matrix-bot-kit-darwin-x64";
+			else if (platform === "win32" && arch === "x64")
+				pkgName = "matrix-bot-kit-win32-x64-msvc";
+			else if (platform === "win32" && arch === "arm64")
+				pkgName = "matrix-bot-kit-win32-arm64-msvc";
+			else if (platform === "linux" && arch === "x64")
+				pkgName = "matrix-bot-kit-linux-x64-gnu";
+			else if (platform === "linux" && arch === "arm64")
+				pkgName = "matrix-bot-kit-linux-arm64-gnu";
+
+			if (pkgName) {
+				return require(pkgName) as NativeBinding;
+			}
+			return undefined;
+		} catch {
+			return undefined;
+		}
 	}
 }

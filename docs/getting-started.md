@@ -8,7 +8,21 @@ Ensure you have the following installed:
 
 ## Installation
 
-1. Clone your project repository.
+Install `matrix-bot-kit` using your preferred package manager:
+
+```bash
+bun add matrix-bot-kit
+# or
+npm install matrix-bot-kit
+# or
+yarn add matrix-bot-kit
+```
+
+### Building from Source
+
+If you want to contribute or build from source:
+
+1. Clone the project repository.
 2. Build the native binding:
    ```bash
    devbox run build-native
@@ -19,7 +33,7 @@ Ensure you have the following installed:
 ## Your First Bot
 
 ```ts
-import { MatrixBot, type Context } from "../matrix-bot-sdk/js/src/index"
+import { MatrixBot, type Context } from "matrix-bot-kit"
 
 const bot = new MatrixBot({
   homeserverUrl: "https://matrix.org",

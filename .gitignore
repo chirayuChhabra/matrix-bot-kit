@@ -1,6 +1,8 @@
 /target/
 /.devbox/
 /js/native/*.node
-/node_modules/
-/.matrix-bot-sdk/
+node_modules/
+/.matrix-bot-kit/
 /.gemini/
+/js/dist/
+/.matrix-bot-sdk/

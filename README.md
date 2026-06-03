@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Matrix Bot SDK</h1>
+  <h1>Matrix Bot Kit</h1>
   <p><b>A TypeScript framework for building Matrix bots with a native Rust backend.</b></p>
   <p>
     <a href="https://matrix.org"><img src="https://img.shields.io/badge/Matrix-Compatible-black?style=flat-square&logo=matrix" alt="Matrix Compatible" /></a>
@@ -10,7 +10,21 @@
 
 ---
 
-The Matrix Bot SDK provides a high-level TypeScript API for bot logic, backed by a Rust runtime that handles Matrix syncing, End-to-End Encryption (E2EE), state resolution, and connection pooling.
+The Matrix Bot Kit provides a high-level TypeScript API for bot logic, backed by a Rust runtime that handles Matrix syncing, End-to-End Encryption (E2EE), state resolution, and connection pooling.
+
+---
+
+## Installation
+
+Install using your preferred package manager:
+
+```bash
+npm install matrix-bot-kit
+# or
+bun add matrix-bot-kit
+# or
+yarn add matrix-bot-kit
+```
 
 ---
 
@@ -47,8 +61,3 @@ For full documentation and advanced usage, please refer to our detailed document
 - [API Reference](./docs/api-reference.md)
 - [Logging & Error Handling](./docs/logging-error-handling.md)
 
----
-
-<div align="center">
-  <p><i>Note: This repository is usable locally but is not currently packaged for npm. Package publishing and platform binary distribution are planned.</i></p>
-</div>

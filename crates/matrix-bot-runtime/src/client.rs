@@ -93,7 +93,7 @@ async fn login_or_restore(client: &Client, config: &MatrixBotConfig) -> RuntimeR
     let response = client
         .matrix_auth()
         .login_username(&config.username, &config.password)
-        .initial_device_display_name("Matrix Bot SDK")
+        .initial_device_display_name("Matrix Bot Kit")
         .send()
         .await?;
 
