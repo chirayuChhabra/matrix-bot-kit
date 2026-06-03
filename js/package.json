@@ -1,55 +1,63 @@
 {
-	"name": "matrix-bot-kit",
-	"version": "0.1.1",
-	"description": "A modern SDK for creating Matrix bots",
-	"author": "Chirayu Chhabra",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
-	},
-	"keywords": [
-		"matrix",
-		"bot",
-		"sdk",
-		"rust",
-		"napi",
-		"typescript"
-	],
-	"type": "module",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js",
-			"require": "./dist/index.cjs",
-			"default": "./dist/index.js"
-		}
-	},
-	"main": "./dist/index.cjs",
-	"types": "./dist/index.d.ts",
-	"files": [
-		"dist",
-		"native"
-	],
-	"scripts": {
-		"build": "tsup",
-		"build-native": "napi build --platform --release",
-		"prepack": "devbox run build-js",
-		"artifacts": "napi artifacts",
-		"prepublishOnly": "napi prepublish -t npm"
-	},
-	"napi": {
-		"binaryName": "matrix-bot-kit",
-		"targets": [
-			"x86_64-unknown-linux-gnu",
-			"aarch64-unknown-linux-gnu",
-			"x86_64-pc-windows-msvc",
-			"aarch64-pc-windows-msvc",
-			"x86_64-apple-darwin",
-			"aarch64-apple-darwin"
-		]
-	},
-	"devDependencies": {
-		"@napi-rs/cli": "^3.0.0"
-	}
+  "name": "matrix-bot-kit",
+  "version": "0.1.2",
+  "description": "A modern SDK for creating Matrix bots",
+  "author": "Chirayu Chhabra",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
+  },
+  "keywords": [
+    "matrix",
+    "bot",
+    "sdk",
+    "rust",
+    "napi",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "native"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build-native": "napi build --platform --release --manifest-path ../crates/matrix-bot-node/Cargo.toml --output-dir ./native",
+    "prepack": "devbox run build-js",
+    "artifacts": "napi artifacts",
+    "prepublishOnly": "napi prepublish -t npm"
+  },
+  "napi": {
+    "binaryName": "matrix-bot-kit",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-pc-windows-msvc",
+      "aarch64-pc-windows-msvc",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin"
+    ]
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.0.0"
+  },
+  "optionalDependencies": {
+    "matrix-bot-kit-linux-x64-gnu": "0.1.1",
+    "matrix-bot-kit-linux-arm64-gnu": "0.1.1",
+    "matrix-bot-kit-win32-x64-msvc": "0.1.1",
+    "matrix-bot-kit-win32-arm64-msvc": "0.1.1",
+    "matrix-bot-kit-darwin-x64": "0.1.1",
+    "matrix-bot-kit-darwin-arm64": "0.1.1"
+  }
 }
