@@ -1,6 +1,6 @@
 {
   "name": "matrix-bot-kit",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "A modern SDK for creating Matrix bots",
   "author": "Chirayu Chhabra",
   "license": "MIT",
@@ -34,9 +34,8 @@
   "scripts": {
     "build": "tsup",
     "build-native": "napi build --platform --release --manifest-path ../crates/matrix-bot-node/Cargo.toml --output-dir .",
-    "prepack": "devbox run build-js",
     "artifacts": "napi artifacts",
-    "prepublishOnly": "napi prepublish -t npm"
+    "prepublishOnly": "napi prepublish -t npm --skip-optional-publish"
   },
   "napi": {
     "binaryName": "matrix-bot-kit",
@@ -53,11 +52,11 @@
     "@napi-rs/cli": "^3.0.0"
   },
   "optionalDependencies": {
-    "matrix-bot-kit-linux-x64-gnu": "0.1.1",
-    "matrix-bot-kit-linux-arm64-gnu": "0.1.1",
-    "matrix-bot-kit-win32-x64-msvc": "0.1.1",
-    "matrix-bot-kit-win32-arm64-msvc": "0.1.1",
-    "matrix-bot-kit-darwin-x64": "0.1.1",
-    "matrix-bot-kit-darwin-arm64": "0.1.1"
+    "matrix-bot-kit-linux-x64-gnu": "0.2.0",
+    "matrix-bot-kit-linux-arm64-gnu": "0.2.0",
+    "matrix-bot-kit-win32-x64-msvc": "0.2.0",
+    "matrix-bot-kit-win32-arm64-msvc": "0.2.0",
+    "matrix-bot-kit-darwin-x64": "0.2.0",
+    "matrix-bot-kit-darwin-arm64": "0.2.0"
   }
 }

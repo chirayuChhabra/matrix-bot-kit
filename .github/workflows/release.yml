@@ -101,12 +101,30 @@ jobs:
       - name: Move artifacts
         run: cd js && bunx @napi-rs/cli artifacts -d ../artifacts
 
+      - name: List packages
+        run: ls -laR js/npm/
+
+      - name: Build TypeScript
+        run: cd js && bun run build
+
       - name: Copy README
         run: cp README.md js/
 
-      - name: Publish to npm
+      - name: Publish platform packages
+        run: |
+          for dir in js/npm/*/; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Publishing $dir..."
+              (cd "$dir" && npm publish --access public) || true
+            fi
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish main package
         run: |
           cd js
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
