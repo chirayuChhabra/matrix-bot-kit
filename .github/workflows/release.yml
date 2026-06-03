@@ -91,7 +91,7 @@ jobs:
           path: artifacts
 
       - name: Move artifacts
-        run: cd js && bunx @napi-rs/cli artifacts --dir ../artifacts
+        run: cd js && bunx @napi-rs/cli artifacts -d ../artifacts
 
       - name: Copy README
         run: cp README.md js/
