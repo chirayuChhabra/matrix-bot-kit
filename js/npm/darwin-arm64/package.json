@@ -1,0 +1,29 @@
+{
+  "name": "matrix-bot-kit-darwin-arm64",
+  "version": "0.1.5",
+  "cpu": [
+    "arm64"
+  ],
+  "main": "matrix-bot-kit.darwin-arm64.node",
+  "files": [
+    "matrix-bot-kit.darwin-arm64.node"
+  ],
+  "description": "A modern SDK for creating Matrix bots",
+  "keywords": [
+    "matrix",
+    "bot",
+    "sdk",
+    "rust",
+    "napi",
+    "typescript"
+  ],
+  "author": "Chirayu Chhabra",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
+  },
+  "os": [
+    "darwin"
+  ]
+}
