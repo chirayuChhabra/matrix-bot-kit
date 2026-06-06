@@ -6,3 +6,4 @@ node_modules/
 /.gemini/
 /js/dist/
 /.matrix-bot-sdk/
+/bot-testing/
