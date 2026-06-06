@@ -34,6 +34,8 @@ export type MatrixBotOptions = {
 	moderator?: string[];
 	/** The number of messages to fetch from the timeline on startup. */
 	timelineLimit?: number;
+	/** The version string of your bot (e.g., from package.json). Shown in the !version command. */
+	version?: string;
 };
 
 export type MatrixBotRuntimeConfig = {
@@ -406,7 +408,7 @@ export class MatrixBot {
 		}
 	>();
 	// biome-ignore lint/suspicious/noExplicitAny: sessions can contain any dynamic data
-	private sessions = new Map<string, Record<string, any>>();
+	private sessions = new Map<string, { data: Record<string, any>; lastAccessed: number }>();
 
 	constructor(options: MatrixBotOptions) {
 		assertPresent("homeserverUrl", options.homeserverUrl);
@@ -458,9 +460,9 @@ export class MatrixBot {
 
 		registerUtility("!version", "Shows the bot version.", async (ctx) => {
 			try {
-				const pkgStr = await readFile("package.json", "utf-8");
-				const pkg = JSON.parse(pkgStr);
-				await ctx.reply.text(`Version: ${pkg.version}`);
+				const sdkPkg = require("../../package.json");
+				const botVersion = this.options.version ? `Bot Version: ${this.options.version}\n` : "";
+				await ctx.reply.text(`${botVersion}SDK Version: ${sdkPkg.version}`);
 			} catch (_e) {
 				await ctx.reply.text("Version: unknown");
 			}
@@ -490,7 +492,6 @@ export class MatrixBot {
 			"!maintenance",
 			"Toggles maintenance mode.",
 			async (ctx) => {
-				const password = ctx.message.body.trim();
 				const expectedPassword =
 					typeof Bun !== "undefined"
 						? Bun.env.MAINTENANCE_PASSWORD
@@ -499,14 +500,21 @@ export class MatrixBot {
 					await ctx.reply.text("Maintenance password not configured.");
 					return;
 				}
+
+				const promptCtx = await ctx.prompt("Please enter the maintenance password:");
+				const password = promptCtx.message.body.trim();
+
 				if (password !== expectedPassword) {
 					await ctx.reply.text("Invalid password.");
+					await promptCtx.message.redact("Hide password");
 					return;
 				}
+
 				this.isUnderMaintenance = !this.isUnderMaintenance;
 				await ctx.reply.text(
 					`Maintenance mode is now ${this.isUnderMaintenance ? "ON" : "OFF"}.`,
 				);
+				await promptCtx.message.redact("Hide password");
 			},
 		);
 
@@ -514,7 +522,6 @@ export class MatrixBot {
 			"!shutdown",
 			"Shuts down the bot gracefully.",
 			async (ctx) => {
-				const password = ctx.message.body.trim();
 				const expectedPassword =
 					typeof Bun !== "undefined"
 						? Bun.env.MAINTENANCE_PASSWORD
@@ -523,13 +530,18 @@ export class MatrixBot {
 					await ctx.reply.text("Maintenance password not configured.");
 					return;
 				}
+
+				const promptCtx = await ctx.prompt("Please enter the maintenance password:");
+				const password = promptCtx.message.body.trim();
+
 				if (password !== expectedPassword) {
-					await ctx.reply.text(
-						password ? "Invalid password." : "Password required.",
-					);
+					await ctx.reply.text("Invalid password.");
+					await promptCtx.message.redact("Hide password");
 					return;
 				}
+
 				await ctx.reply.text("Shutting down gracefully...");
+				await promptCtx.message.redact("Hide password");
 				await this.stop();
 				process.exit(0);
 			},
@@ -1066,44 +1078,61 @@ export class MatrixBot {
 
 		await this.writeConfiguredSelfDocumentation();
 
-		this.native.start(
-			(message) => {
-				this.contextFromNative(message)
-					.then((ctx) => {
-						const promptKey = `${message.roomId}:${message.sender}`;
-						const pendingPrompt = this.pendingPrompts.get(promptKey);
-						if (pendingPrompt) {
-							clearTimeout(pendingPrompt.timer);
-							this.pendingPrompts.delete(promptKey);
-							pendingPrompt.resolve(ctx);
-							return;
-						}
+		const readyPromise = new Promise<void>((resolveReady) => {
+			// biome-ignore lint/style/noNonNullAssertion: guaranteed below
+			this.native!.start(
+				(message) => {
+					this.contextFromNative(message)
+						.then((ctx) => {
+							const promptKey = `${message.roomId}:${message.sender}`;
+							const pendingPrompt = this.pendingPrompts.get(promptKey);
+							if (pendingPrompt) {
+								clearTimeout(pendingPrompt.timer);
+								this.pendingPrompts.delete(promptKey);
+								pendingPrompt.resolve(ctx);
+								return;
+							}
 
-						this.dispatch(ctx).catch((error) => {
-							void this.handleError({ error, phase: "dispatch", request: ctx });
+							this.dispatch(ctx).catch((error) => {
+								void this.handleError({ error, phase: "dispatch", request: ctx });
+							});
+							this.dispatchListeners(matrixMessageListenerEvent(ctx), {
+								matrix: ctx,
+							}).catch((error) => {
+								void this.handleError({ error, phase: "dispatch", request: ctx });
+							});
+						})
+						.catch((error) => {
+							void this.handleError({ error, phase: "runtime" });
 						});
-						this.dispatchListeners(matrixMessageListenerEvent(ctx), {
-							matrix: ctx,
-						}).catch((error) => {
-							void this.handleError({ error, phase: "dispatch", request: ctx });
-						});
-					})
-					.catch((error) => {
-						void this.handleError({ error, phase: "runtime" });
+				},
+				(event) => {
+					this.log(event.level, event.message, {
+						component: "runtime",
 					});
-			},
-			(event) => {
-				this.log(event.level, event.message, {
-					component: "runtime",
-				});
-			},
-		);
+				},
+				() => resolveReady(),
+			);
+		});
+
+		await readyPromise;
 
 		this.log("info", "Matrix bot runtime started", {
 			component: "runtime",
 		});
 
 		this.startListenerSchedules();
+
+		const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+		const sessionCleanupTimer = setInterval(() => {
+			const now = Date.now();
+			for (const [key, session] of this.sessions.entries()) {
+				if (now - session.lastAccessed > SESSION_TTL_MS) {
+					this.sessions.delete(key);
+				}
+			}
+		}, 60 * 60 * 1000);
+		this.scheduleTimers.push(sessionCleanupTimer);
 
 		if (callback) {
 			callback();
@@ -1216,10 +1245,11 @@ export class MatrixBot {
 
 		const sessionKey = `${message.roomId}:${message.sender}`;
 		if (!this.sessions.has(sessionKey)) {
-			this.sessions.set(sessionKey, {});
+			this.sessions.set(sessionKey, { data: {}, lastAccessed: Date.now() });
 		}
 		// biome-ignore lint/style/noNonNullAssertion: guaranteed by set above if missing
 		const session = this.sessions.get(sessionKey)!;
+		session.lastAccessed = Date.now();
 
 		let actionId: string | undefined;
 		if (message.pollResponse) {
@@ -1333,7 +1363,7 @@ export class MatrixBot {
 			closePoll: async (pollEventId: string, fallbackText?: string) => {
 				return native.closePoll(message.roomId, pollEventId, fallbackText);
 			},
-			session,
+			session: session.data,
 			prompt: async (body: string, options?: { timeoutMs?: number }) => {
 				await native.sendText(message.roomId, body);
 				return this.createPrompt(
@@ -2221,10 +2251,12 @@ function defaultLogger(event: MatrixLogEvent): void {
 	if (event.level === "error") {
 		console.error(`${prefix} ${event.message}${contextStr}`);
 		if (event.error) console.error(event.error);
-	} else if (event.level === "warn") {
-		console.warn(`${prefix} ${event.message}${contextStr}`);
-	} else {
-		console.log(`${prefix} ${event.message}${contextStr}`);
+	} else if (process.env.NODE_ENV !== "test") {
+		if (event.level === "warn") {
+			console.warn(`${prefix} ${event.message}${contextStr}`);
+		} else {
+			console.log(`${prefix} ${event.message}${contextStr}`);
+		}
 	}
 }
 
