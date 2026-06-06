@@ -13,7 +13,7 @@ bot.command("!register", async (ctx) => {
 ```
 
 **Session State:**
-Persist data across multiple interactions.
+Persist data across multiple interactions. *Note: Session data is stored in memory per-user, per-room, and automatically expires after 24 hours of inactivity to prevent memory leaks.*
 
 ```ts
 bot.command("!counter", async (ctx) => {
