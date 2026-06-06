@@ -46,7 +46,7 @@ type Context = {
   }
   send: SendContext // Chainable sender (.message, .markdown, .file, .poll, etc.)
   reply: ReplyContext // Chainable replier (.text, .markdown)
-  session: Record<string, any> // In-memory per-user-per-room state
+  session: Record<string, any> // In-memory per-user-per-room state (expires after 24h of inactivity)
   prompt: (body: string, options?: { timeoutMs?: number }) => Promise<Context>
   downloadMedia(target?: string | { roomId?: string; eventId?: string }): Promise<Buffer>
 }
