@@ -93,7 +93,9 @@ describe("MatrixBot Utility Commands", () => {
 				room: { isDirect: true },
 				sender: { isAdmin: () => true },
 			});
-			replyCtx.message.redact = async () => { redacted = true; };
+			replyCtx.message.redact = async () => {
+				redacted = true;
+			};
 			return replyCtx;
 		};
 

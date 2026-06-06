@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import log from "loglevel";
 import {
 	loadNativeBinding,
 	type MatrixMessageType,
@@ -408,7 +409,10 @@ export class MatrixBot {
 		}
 	>();
 	// biome-ignore lint/suspicious/noExplicitAny: sessions can contain any dynamic data
-	private sessions = new Map<string, { data: Record<string, any>; lastAccessed: number }>();
+	private sessions = new Map<
+		string,
+		{ data: Record<string, any>; lastAccessed: number }
+	>();
 
 	constructor(options: MatrixBotOptions) {
 		assertPresent("homeserverUrl", options.homeserverUrl);
@@ -461,7 +465,9 @@ export class MatrixBot {
 		registerUtility("!version", "Shows the bot version.", async (ctx) => {
 			try {
 				const sdkPkg = require("../../package.json");
-				const botVersion = this.options.version ? `Bot Version: ${this.options.version}\n` : "";
+				const botVersion = this.options.version
+					? `Bot Version: ${this.options.version}\n`
+					: "";
 				await ctx.reply.text(`${botVersion}SDK Version: ${sdkPkg.version}`);
 			} catch (_e) {
 				await ctx.reply.text("Version: unknown");
@@ -501,7 +507,9 @@ export class MatrixBot {
 					return;
 				}
 
-				const promptCtx = await ctx.prompt("Please enter the maintenance password:");
+				const promptCtx = await ctx.prompt(
+					"Please enter the maintenance password:",
+				);
 				const password = promptCtx.message.body.trim();
 
 				if (password !== expectedPassword) {
@@ -531,7 +539,9 @@ export class MatrixBot {
 					return;
 				}
 
-				const promptCtx = await ctx.prompt("Please enter the maintenance password:");
+				const promptCtx = await ctx.prompt(
+					"Please enter the maintenance password:",
+				);
 				const password = promptCtx.message.body.trim();
 
 				if (password !== expectedPassword) {
@@ -1094,12 +1104,20 @@ export class MatrixBot {
 							}
 
 							this.dispatch(ctx).catch((error) => {
-								void this.handleError({ error, phase: "dispatch", request: ctx });
+								void this.handleError({
+									error,
+									phase: "dispatch",
+									request: ctx,
+								});
 							});
 							this.dispatchListeners(matrixMessageListenerEvent(ctx), {
 								matrix: ctx,
 							}).catch((error) => {
-								void this.handleError({ error, phase: "dispatch", request: ctx });
+								void this.handleError({
+									error,
+									phase: "dispatch",
+									request: ctx,
+								});
 							});
 						})
 						.catch((error) => {
@@ -1124,14 +1142,17 @@ export class MatrixBot {
 		this.startListenerSchedules();
 
 		const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-		const sessionCleanupTimer = setInterval(() => {
-			const now = Date.now();
-			for (const [key, session] of this.sessions.entries()) {
-				if (now - session.lastAccessed > SESSION_TTL_MS) {
-					this.sessions.delete(key);
+		const sessionCleanupTimer = setInterval(
+			() => {
+				const now = Date.now();
+				for (const [key, session] of this.sessions.entries()) {
+					if (now - session.lastAccessed > SESSION_TTL_MS) {
+						this.sessions.delete(key);
+					}
 				}
-			}
-		}, 60 * 60 * 1000);
+			},
+			60 * 60 * 1000,
+		);
 		this.scheduleTimers.push(sessionCleanupTimer);
 
 		if (callback) {
@@ -2249,13 +2270,13 @@ function defaultLogger(event: MatrixLogEvent): void {
 	const contextStr = context.length > 0 ? ` (${context.join(", ")})` : "";
 
 	if (event.level === "error") {
-		console.error(`${prefix} ${event.message}${contextStr}`);
-		if (event.error) console.error(event.error);
+		log.error(`${prefix} ${event.message}${contextStr}`);
+		if (event.error) log.error(event.error);
 	} else if (process.env.NODE_ENV !== "test") {
 		if (event.level === "warn") {
-			console.warn(`${prefix} ${event.message}${contextStr}`);
+			log.warn(`${prefix} ${event.message}${contextStr}`);
 		} else {
-			console.log(`${prefix} ${event.message}${contextStr}`);
+			log.info(`${prefix} ${event.message}${contextStr}`);
 		}
 	}
 }

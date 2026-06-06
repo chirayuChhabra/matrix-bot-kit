@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../src/index";
 
-function createMockContext(overrides: Partial<Context> | Record<string, any> = {}): Context {
+function createMockContext(
+	overrides: Partial<Context> | Record<string, any> = {},
+): Context {
 	const body = (overrides as any).body ?? "hello";
 	const msgOverrides = (overrides as any).message ?? {};
 	return {
@@ -44,8 +46,6 @@ function createMockContext(overrides: Partial<Context> | Record<string, any> = {
 import { CommandGroup } from "../src/index";
 
 describe("JS SDK Hammering & Scale Tests", () => {
-
-
 	test("Hammering massive wildcard listener evaluations", async () => {
 		const bot = new MatrixBot({
 			homeserverUrl: "http://localhost",
@@ -66,16 +66,21 @@ describe("JS SDK Hammering & Scale Tests", () => {
 		const ITERATIONS = 1000;
 		const promises: Promise<number>[] = [];
 		const start = performance.now();
-		
+
 		for (let i = 0; i < ITERATIONS; i++) {
 			const ctx = createMockContext();
-			promises.push(bot.dispatchListeners({
-				id: `evt-${i}`,
-				kind: "matrix.message",
-				source: "matrix",
-				request: ctx,
-				timestamp: new Date(),
-			}, { matrix: ctx }));
+			promises.push(
+				bot.dispatchListeners(
+					{
+						id: `evt-${i}`,
+						kind: "matrix.message",
+						source: "matrix",
+						request: ctx,
+						timestamp: new Date(),
+					},
+					{ matrix: ctx },
+				),
+			);
 		}
 
 		await Promise.all(promises);
@@ -83,6 +88,8 @@ describe("JS SDK Hammering & Scale Tests", () => {
 
 		// 1000 iterations * 100 listeners = 100,000 listener executions
 		expect(totalHits).toBe(100000);
-		console.log(`[JS Hammer Test] 100,000 listener executions took ${(end - start).toFixed(2)}ms`);
+		console.log(
+			`[JS Hammer Test] 100,000 listener executions took ${(end - start).toFixed(2)}ms`,
+		);
 	});
 });
