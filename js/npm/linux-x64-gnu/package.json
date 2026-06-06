@@ -1,32 +1,32 @@
 {
-  "name": "matrix-bot-kit-linux-x64-gnu",
-  "version": "0.2.0",
-  "cpu": [
-    "x64"
-  ],
-  "main": "matrix-bot-kit.linux-x64-gnu.node",
-  "files": [
-    "matrix-bot-kit.linux-x64-gnu.node"
-  ],
-  "description": "A modern SDK for creating Matrix bots",
-  "keywords": [
-    "matrix",
-    "bot",
-    "sdk",
-    "rust",
-    "napi",
-    "typescript"
-  ],
-  "author": "Chirayu Chhabra",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
-  },
-  "os": [
-    "linux"
-  ],
-  "libc": [
-    "glibc"
-  ]
+	"name": "matrix-bot-kit-linux-x64-gnu",
+	"version": "0.2.0",
+	"cpu": [
+		"x64"
+	],
+	"main": "matrix-bot-kit.linux-x64-gnu.node",
+	"files": [
+		"matrix-bot-kit.linux-x64-gnu.node"
+	],
+	"description": "A modern SDK for creating Matrix bots",
+	"keywords": [
+		"matrix",
+		"bot",
+		"sdk",
+		"rust",
+		"napi",
+		"typescript"
+	],
+	"author": "Chirayu Chhabra",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
+	},
+	"os": [
+		"linux"
+	],
+	"libc": [
+		"glibc"
+	]
 }

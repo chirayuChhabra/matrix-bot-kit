@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../src/index";
 
-function createMockContext(overrides: Partial<Context> | Record<string, any> = {}): Context {
+function createMockContext(
+	overrides: Partial<Context> | Record<string, any> = {},
+): Context {
 	const body = (overrides as any).body ?? "hello";
 	const msgOverrides = (overrides as any).message ?? {};
 	return {
@@ -69,7 +71,9 @@ describe("Advanced API Behaviors", () => {
 				request: createMockContext({ room: { id: "!disallowed:example.com" } }),
 				timestamp: new Date(),
 			},
-			{ matrix: createMockContext({ room: { id: "!disallowed:example.com" } }) },
+			{
+				matrix: createMockContext({ room: { id: "!disallowed:example.com" } }),
+			},
 		);
 
 		expect(executed).toBe(false);
@@ -101,7 +105,7 @@ describe("Advanced API Behaviors", () => {
 		bot.on.message(async () => {
 			order.push(1);
 		});
-		
+
 		bot.on.message(async () => {
 			order.push(2);
 		});
@@ -136,7 +140,9 @@ describe("Advanced API Behaviors", () => {
 		});
 
 		bot.on.pollVote({ actionId: "my-poll" }, async (event, actions) => {
-			expect(actions.matrix?.message.pollResponse?.selections).toEqual(["answer-1"]);
+			expect(actions.matrix?.message.pollResponse?.selections).toEqual([
+				"answer-1",
+			]);
 			executed = true;
 		});
 
@@ -150,8 +156,8 @@ describe("Advanced API Behaviors", () => {
 					pollEventId: "123",
 					actionId: "my-poll",
 					selections: ["answer-1"],
-				}
-			}
+				},
+			},
 		});
 
 		// Trigger inner poll response logic through matrix event abstraction

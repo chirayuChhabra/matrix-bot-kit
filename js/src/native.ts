@@ -146,12 +146,16 @@ export type NativeBinding = {
 export function loadNativeBinding(): NativeBinding | undefined {
 	try {
 		const isCJS = typeof __filename !== "undefined";
-		const require = isCJS ? createRequire(__filename) : createRequire(import.meta.url);
+		const require = isCJS
+			? createRequire(__filename)
+			: createRequire(import.meta.url);
 		return require("../native/matrix_bot_node.node") as NativeBinding;
 	} catch {
 		try {
 			const isCJS = typeof __filename !== "undefined";
-			const require = isCJS ? createRequire(__filename) : createRequire(import.meta.url);
+			const require = isCJS
+				? createRequire(__filename)
+				: createRequire(import.meta.url);
 			const { platform, arch } = process;
 			let pkgName = "";
 			if (platform === "darwin" && arch === "arm64")
