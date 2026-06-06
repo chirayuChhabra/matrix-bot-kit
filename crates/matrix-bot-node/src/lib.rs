@@ -218,6 +218,7 @@ impl MatrixBot {
         &self,
         on_message: Function<'static, NativeIncomingMessage, ()>,
         on_log: Function<'static, NativeRuntimeLog, ()>,
+        on_ready: Function<'static, (), ()>,
     ) -> Result<()> {
         let callback = Arc::new(
             on_message
@@ -229,6 +230,13 @@ impl MatrixBot {
         let logger = Arc::new(
             on_log
                 .build_threadsafe_function::<NativeRuntimeLog>()
+                .callee_handled::<false>()
+                .build()
+                .map_err(to_napi_error)?,
+        );
+        let ready_callback = Arc::new(
+            on_ready
+                .build_threadsafe_function::<()>()
                 .callee_handled::<false>()
                 .build()
                 .map_err(to_napi_error)?,
@@ -279,34 +287,35 @@ impl MatrixBot {
                 register_invite_handler(client.clone(), config.clone(), logger.clone());
                 register_event_handlers(client.clone(), command_groups, listeners, callback, logger.clone());
 
-                let mut next_batch = match runtime.sync_once(None, &sync_options).await {
-                    Ok(next_batch) => next_batch,
-                    Err(error) => {
-                        emit_runtime_log(
-                            &logger,
-                            "error",
-                            format!("initial Matrix sync failed: {error}"),
-                        );
-                        return;
-                    }
-                };
-                emit_runtime_log(&logger, "info", "Initial Matrix sync completed");
-
+                let mut consecutive_failures = 0;
+                let mut initial_sync_done = false;
+                let mut next_batch = None;
+                
                 loop {
                     match runtime
-                        .sync_once(Some(next_batch.clone()), &sync_options)
+                        .sync_once(next_batch.clone(), &sync_options)
                         .await
                     {
                         Ok(response_next_batch) => {
-                            next_batch = response_next_batch;
+                            next_batch = Some(response_next_batch);
+                            consecutive_failures = 0;
+                            
+                            if !initial_sync_done {
+                                initial_sync_done = true;
+                                emit_runtime_log(&logger, "info", "Initial Matrix sync completed");
+                                ready_callback.call((), ThreadsafeFunctionCallMode::NonBlocking);
+                            }
                         }
                         Err(error) => {
+                            consecutive_failures += 1;
+                            let delay = if consecutive_failures <= 3 { 1 } else { 10 };
+                            let sync_type = if initial_sync_done { "sync" } else { "initial sync" };
                             emit_runtime_log(
                                 &logger,
                                 "warn",
-                                format!("Matrix sync failed: {error}; retrying in 5s"),
+                                format!("Matrix {sync_type} failed: {error}; retrying in {delay}s"),
                             );
-                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            tokio::time::sleep(Duration::from_secs(delay)).await;
                         }
                     }
                 }
@@ -568,7 +577,8 @@ fn register_invite_handler(client: Client, config: Arc<MatrixBotConfig>, logger:
             let config = config.clone();
             let logger = logger.clone();
             async move {
-                if event.state_key != client.user_id().expect("logged in client") {
+                let Some(user_id) = client.user_id() else { return; };
+                if event.state_key != user_id {
                     return;
                 }
 
@@ -678,11 +688,8 @@ fn register_message_handler(
 
                 match incoming_message_from_room_event(&event, &room).await {
                     Ok(Some(message)) => {
-                        let bot_user_id = client
-                            .user_id()
-                            .expect("logged in client")
-                            .as_str()
-                            .to_owned();
+                        let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                         if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                             return;
                         }
@@ -722,11 +729,8 @@ fn register_poll_handler(
                 }
 
                 let message = incoming_poll_from_event(&event, &room);
-                let bot_user_id = client
-                    .user_id()
-                    .expect("logged in client")
-                    .as_str()
-                    .to_owned();
+                let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                 if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                     return;
                 }
@@ -759,11 +763,8 @@ fn register_unstable_poll_handler(
                 }
 
                 if let Some(message) = incoming_unstable_poll_from_event(&event, &room) {
-                    let bot_user_id = client
-                        .user_id()
-                        .expect("logged in client")
-                        .as_str()
-                        .to_owned();
+                    let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                     if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                         return;
                     }
@@ -801,11 +802,8 @@ fn register_poll_response_handler(
                 }
 
                 let message = incoming_poll_response_from_event(&event, &room);
-                let bot_user_id = client
-                    .user_id()
-                    .expect("logged in client")
-                    .as_str()
-                    .to_owned();
+                let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                 if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                     return;
                 }
@@ -838,11 +836,8 @@ fn register_unstable_poll_response_handler(
                 }
 
                 let message = incoming_unstable_poll_response_from_event(&event, &room);
-                let bot_user_id = client
-                    .user_id()
-                    .expect("logged in client")
-                    .as_str()
-                    .to_owned();
+                let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                 if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                     return;
                 }
@@ -879,11 +874,8 @@ fn register_poll_end_handler(
                 }
 
                 let message = incoming_poll_end_from_event(&event, &room);
-                let bot_user_id = client
-                    .user_id()
-                    .expect("logged in client")
-                    .as_str()
-                    .to_owned();
+                let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                 if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                     return;
                 }
@@ -916,11 +908,8 @@ fn register_unstable_poll_end_handler(
                 }
 
                 let message = incoming_unstable_poll_end_from_event(&event, &room);
-                let bot_user_id = client
-                    .user_id()
-                    .expect("logged in client")
-                    .as_str()
-                    .to_owned();
+                let Some(user_id) = client.user_id() else { return; };
+                        let bot_user_id = user_id.as_str().to_owned();
                 if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
                     return;
                 }
