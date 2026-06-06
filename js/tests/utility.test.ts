@@ -81,10 +81,21 @@ describe("MatrixBot Utility Commands", () => {
 			Bun.env.MAINTENANCE_PASSWORD = "secret_password";
 
 		const maintCtx = createMockContext({
-			body: "!maintenance secret_password",
+			body: "!maintenance",
 			room: { isDirect: true },
 			sender: { isAdmin: () => true },
 		});
+
+		let redacted = false;
+		maintCtx.prompt = async (text: string) => {
+			const replyCtx = createMockContext({
+				body: "secret_password",
+				room: { isDirect: true },
+				sender: { isAdmin: () => true },
+			});
+			replyCtx.message.redact = async () => { redacted = true; };
+			return replyCtx;
+		};
 
 		let replied = "";
 		maintCtx.reply.text = (async (text: string) => {
@@ -93,6 +104,7 @@ describe("MatrixBot Utility Commands", () => {
 		}) as any;
 		await bot.dispatch(maintCtx);
 		expect(replied).toBe("Maintenance mode is now ON.");
+		expect(redacted).toBe(true);
 
 		// Test intercept
 		const pingCtx = createMockContext({ body: "!ping" });
