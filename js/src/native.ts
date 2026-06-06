@@ -4,6 +4,7 @@ type NativeMatrixBot = {
 	start(
 		onMessage: (message: NativeIncomingMessage) => void,
 		onLog: (event: NativeRuntimeLog) => void,
+		onReady: () => void,
 	): void;
 	sendText(roomId: string, body: string): Promise<void>;
 	sendMarkdown(roomId: string, body: string): Promise<void>;
@@ -144,11 +145,13 @@ export type NativeBinding = {
 
 export function loadNativeBinding(): NativeBinding | undefined {
 	try {
-		const require = createRequire(import.meta.url);
+		const isCJS = typeof __filename !== "undefined";
+		const require = isCJS ? createRequire(__filename) : createRequire(import.meta.url);
 		return require("../native/matrix_bot_node.node") as NativeBinding;
 	} catch {
 		try {
-			const require = createRequire(import.meta.url);
+			const isCJS = typeof __filename !== "undefined";
+			const require = isCJS ? createRequire(__filename) : createRequire(import.meta.url);
 			const { platform, arch } = process;
 			let pkgName = "";
 			if (platform === "darwin" && arch === "arm64")
