@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import log from "loglevel";
@@ -512,7 +513,13 @@ export class MatrixBot {
 				);
 				const password = promptCtx.message.body.trim();
 
-				if (password !== expectedPassword) {
+				const passwordBuf = Buffer.from(password);
+				const expectedPasswordBuf = Buffer.from(expectedPassword);
+				const isPasswordValid =
+					passwordBuf.length === expectedPasswordBuf.length &&
+					crypto.timingSafeEqual(passwordBuf, expectedPasswordBuf);
+
+				if (!isPasswordValid) {
 					await ctx.reply.text("Invalid password.");
 					await promptCtx.message.redact("Hide password");
 					return;
@@ -544,7 +551,13 @@ export class MatrixBot {
 				);
 				const password = promptCtx.message.body.trim();
 
-				if (password !== expectedPassword) {
+				const passwordBuf = Buffer.from(password);
+				const expectedPasswordBuf = Buffer.from(expectedPassword);
+				const isPasswordValid =
+					passwordBuf.length === expectedPasswordBuf.length &&
+					crypto.timingSafeEqual(passwordBuf, expectedPasswordBuf);
+
+				if (!isPasswordValid) {
 					await ctx.reply.text("Invalid password.");
 					await promptCtx.message.redact("Hide password");
 					return;
