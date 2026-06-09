@@ -1,6 +1,6 @@
 # Built-in Utility Commands
 
-Set `config: { utility: true }` when initializing `MatrixBot` to enable built-in commands. 
+Set `config: { utility: { enabled: true, maintenancePassword: "your_password" } }` when initializing `MatrixBot` to enable built-in commands. 
 
 ## Public Commands
 - `!help`: Generates a map of all available commands and groups.
@@ -12,7 +12,7 @@ Set `config: { utility: true }` when initializing `MatrixBot` to enable built-in
 - `!status`: Aggregates uptime, memory usage, and component counts.
 
 ## Password-Protected Commands
-*(Requires `MAINTENANCE_PASSWORD` in your environment)*
-- `!maintenance <password>`: Toggles maintenance mode. Intercepts non-admin commands.
-- `!reload <password>`: Rebuilds and restarts the process using `scripts/reload.sh`.
-- `!shutdown <password>`: Gracefully shuts down the process.
+*(Prompts interactively for the `maintenancePassword` defined in your config)*
+- `!maintenance`: Toggles maintenance mode. Intercepts non-admin commands.
+- `!reload`: Spawns a new instance of the bot and gracefully shuts down the current one.
+- `!shutdown`: Gracefully shuts down the process.

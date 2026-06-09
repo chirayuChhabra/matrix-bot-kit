@@ -14,7 +14,7 @@
 | `dataDir` | ❌ | Session, store, and cache directory. Defaults to `.matrix-bot-kit`. |
 | `config.announceCommandGroupUsage` | ❌ | Sends `> using <group>...` before running a matched group. |
 | `config.selfDocumentation` | ❌ | Writes bot family Markdown when `start()` runs. |
-| `config.utility` | ❌ | Activates built-in maintainer/utility commands. |
+| `config.utility` | ❌ | Configuration object for built-in utility commands (e.g., `{ enabled: true, maintenancePassword: "..." }`). |
 | `logger` | ❌ | Custom log sink. |
 | `onError` | ❌ | Global runtime or dispatch error hook. |
 
