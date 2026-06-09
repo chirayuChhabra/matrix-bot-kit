@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import log from "loglevel";
+log.setDefaultLevel("info");
 import {
 	loadNativeBinding,
 	type MatrixMessageType,
@@ -40,18 +41,40 @@ export type MatrixBotOptions = {
 	version?: string;
 };
 
+/**
+ * Configuration options for built-in utility commands.
+ */
+export type UtilityConfig = {
+	/**
+	 * Whether utility commands (!ping, !status, !maintenance, etc.) should be enabled.
+	 * Defaults to true.
+	 */
+	enabled?: boolean;
+	/**
+	 * The password required to trigger maintenance mode or shutdown the bot.
+	 */
+	maintenancePassword: string;
+};
+
+/**
+ * Additional runtime configuration for the bot.
+ */
 export type MatrixBotRuntimeConfig = {
+	/** Whether to announce when a command group is matched but no child command matches. */
 	announceCommandGroupUsage?: boolean;
+	/** Whether to enable the built-in !help command. */
 	selfDocumentation?: boolean;
+	/** Custom path to markdown documentation to serve or reference. */
 	documentationPath?: string;
-	utility?: boolean;
+	/** Configuration for built-in utility commands. */
+	utility?: UtilityConfig;
 };
 
 type ResolvedMatrixBotRuntimeConfig = {
 	announceCommandGroupUsage: boolean;
 	selfDocumentation: boolean;
 	documentationPath: string;
-	utility: boolean;
+	utility: UtilityConfig;
 };
 
 /**
@@ -429,7 +452,7 @@ export class MatrixBot {
 			? new nativeBinding.MatrixBot(toNativeOptions(this.options))
 			: undefined;
 
-		if (this.config.utility) {
+		if (this.config.utility.enabled) {
 			this.setupUtilityCommands();
 		}
 	}
@@ -499,14 +522,7 @@ export class MatrixBot {
 			"!maintenance",
 			"Toggles maintenance mode.",
 			async (ctx) => {
-				const expectedPassword =
-					typeof Bun !== "undefined"
-						? Bun.env.MAINTENANCE_PASSWORD
-						: process.env.MAINTENANCE_PASSWORD;
-				if (!expectedPassword) {
-					await ctx.reply.text("Maintenance password not configured.");
-					return;
-				}
+				const expectedPassword = this.config.utility.maintenancePassword;
 
 				const promptCtx = await ctx.prompt(
 					"Please enter the maintenance password:",
@@ -537,14 +553,7 @@ export class MatrixBot {
 			"!shutdown",
 			"Shuts down the bot gracefully.",
 			async (ctx) => {
-				const expectedPassword =
-					typeof Bun !== "undefined"
-						? Bun.env.MAINTENANCE_PASSWORD
-						: process.env.MAINTENANCE_PASSWORD;
-				if (!expectedPassword) {
-					await ctx.reply.text("Maintenance password not configured.");
-					return;
-				}
+				const expectedPassword = this.config.utility.maintenancePassword;
 
 				const promptCtx = await ctx.prompt(
 					"Please enter the maintenance password:",
@@ -1868,11 +1877,22 @@ function assertPresent(field: string, value: string | string[]): void {
 function resolveMatrixBotConfig(
 	config: MatrixBotRuntimeConfig = {},
 ): ResolvedMatrixBotRuntimeConfig {
+	let utility: UtilityConfig = { enabled: false, maintenancePassword: "" };
+	if (config.utility) {
+		utility = { enabled: config.utility.enabled ?? true, ...config.utility };
+		if (utility.enabled) {
+			assertPresent(
+				"config.utility.maintenancePassword",
+				config.utility.maintenancePassword,
+			);
+		}
+	}
+
 	return {
 		announceCommandGroupUsage: config.announceCommandGroupUsage ?? false,
 		selfDocumentation: config.selfDocumentation ?? false,
 		documentationPath: config.documentationPath ?? "matrix-bot-family.md",
-		utility: config.utility ?? false,
+		utility,
 	};
 }
 

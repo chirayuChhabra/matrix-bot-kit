@@ -51,7 +51,7 @@ describe("MatrixBot Utility Commands", () => {
 			password: "123",
 			recoveryKey: "abc",
 			admin: ["@admin:example.org"],
-			config: { utility: true },
+			config: { utility: { maintenancePassword: "secret_password" } },
 		});
 
 		// Check if !ping is registered
@@ -73,12 +73,8 @@ describe("MatrixBot Utility Commands", () => {
 			password: "123",
 			recoveryKey: "abc",
 			admin: ["@admin:example.org"],
-			config: { utility: true },
+			config: { utility: { maintenancePassword: "secret_password" } },
 		});
-
-		process.env.MAINTENANCE_PASSWORD = "secret_password";
-		if (typeof Bun !== "undefined")
-			Bun.env.MAINTENANCE_PASSWORD = "secret_password";
 
 		const maintCtx = createMockContext({
 			body: "!maintenance",
