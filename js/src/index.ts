@@ -579,6 +579,45 @@ export class MatrixBot {
 			},
 		);
 
+		registerUtility(
+			"!reload",
+			"Reloads the bot by spawning a new instance and stopping the old one.",
+			async (ctx) => {
+				const expectedPassword = this.config.utility.maintenancePassword;
+
+				const promptCtx = await ctx.prompt(
+					"Please enter the maintenance password:",
+				);
+				const password = promptCtx.message.body.trim();
+
+				const passwordBuf = Buffer.from(password);
+				const expectedPasswordBuf = Buffer.from(expectedPassword);
+				const isPasswordValid =
+					passwordBuf.length === expectedPasswordBuf.length &&
+					crypto.timingSafeEqual(passwordBuf, expectedPasswordBuf);
+
+				if (!isPasswordValid) {
+					await ctx.reply.text("Invalid password.");
+					await promptCtx.message.redact("Hide password");
+					return;
+				}
+
+				await ctx.reply.text("Spawning new instance and reloading...");
+				await promptCtx.message.redact("Hide password");
+
+				await this.stop();
+
+				const { spawn } = await import("node:child_process");
+				const child = spawn(process.argv[0], process.argv.slice(1), {
+					detached: true,
+					stdio: "inherit",
+				});
+				child.unref();
+
+				process.exit(0);
+			},
+		);
+
 		const helpGroup = new CommandGroup({
 			name: "!help",
 			command: "!help",
