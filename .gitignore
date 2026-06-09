@@ -7,3 +7,4 @@ node_modules/
 /js/dist/
 /.matrix-bot-sdk/
 /bot-testing/
+/fullDocs.md
