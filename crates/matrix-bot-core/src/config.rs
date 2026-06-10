@@ -2,12 +2,28 @@ use std::path::PathBuf;
 
 use crate::{MatrixBotError, Result};
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct SecretString(String);
+
+impl std::fmt::Debug for SecretString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Secret([REDACTED])")
+    }
+}
+
+impl std::ops::Deref for SecretString {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatrixBotConfig {
     pub homeserver_url: String,
     pub username: String,
-    pub password: String,
-    pub recovery_key: String,
+    pub password: SecretString,
+    pub recovery_key: SecretString,
     pub data_dir: PathBuf,
     pub admin: Vec<String>,
     pub moderator: Vec<String>,
@@ -27,8 +43,8 @@ impl MatrixBotConfig {
         let config = Self {
             homeserver_url: homeserver_url.into(),
             username: username.into(),
-            password: password.into(),
-            recovery_key: recovery_key.into(),
+            password: SecretString(password.into()),
+            recovery_key: SecretString(recovery_key.into()),
             data_dir: PathBuf::from(".matrix-bot-kit"),
             admin,
             moderator,
