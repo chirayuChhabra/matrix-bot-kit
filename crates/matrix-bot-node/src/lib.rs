@@ -159,7 +159,8 @@ pub struct NativePollEndMessage {
 #[napi]
 pub struct MatrixBot {
     inner: matrix_bot_core::MatrixBot,
-    client: Arc<std::sync::Mutex<Option<Client>>>,
+    client: Arc<tokio::sync::Mutex<Option<Client>>>,
+    shutdown_notify: Arc<tokio::sync::Notify>,
 }
 
 #[napi]
@@ -185,8 +186,14 @@ impl MatrixBot {
 
         Ok(Self {
             inner: matrix_bot_core::MatrixBot::new(config).map_err(to_napi_error)?,
-            client: Arc::new(std::sync::Mutex::new(None)),
+            client: Arc::new(tokio::sync::Mutex::new(None)),
+            shutdown_notify: Arc::new(tokio::sync::Notify::new()),
         })
+    }
+
+    #[napi]
+    pub fn stop(&self) {
+        self.shutdown_notify.notify_waiters();
     }
 
     #[napi]
@@ -247,6 +254,7 @@ impl MatrixBot {
         let stored_client = self.client.clone();
         let command_groups = Arc::new(self.inner.command_groups().to_vec());
         let listeners = Arc::new(self.inner.listeners().to_vec());
+        let shutdown_notify = self.shutdown_notify.clone();
 
         std::thread::spawn(move || {
             let logger_for_thread = logger.clone();
@@ -279,9 +287,7 @@ impl MatrixBot {
                 };
                 let client = runtime.client().clone();
 
-                if let Ok(mut stored_client) = stored_client.lock() {
-                    *stored_client = Some(client.clone());
-                }
+                *stored_client.lock().await = Some(client.clone());
 
                 emit_runtime_log(&logger, "info", "Matrix bot connected");
                 register_invite_handler(client.clone(), config.clone(), logger.clone());
@@ -292,30 +298,37 @@ impl MatrixBot {
                 let mut next_batch = None;
                 
                 loop {
-                    match runtime
-                        .sync_once(next_batch.clone(), &sync_options)
-                        .await
-                    {
-                        Ok(response_next_batch) => {
-                            next_batch = Some(response_next_batch);
-                            consecutive_failures = 0;
-                            
-                            if !initial_sync_done {
-                                initial_sync_done = true;
-                                emit_runtime_log(&logger, "info", "Initial Matrix sync completed");
-                                ready_callback.call((), ThreadsafeFunctionCallMode::NonBlocking);
+                    tokio::select! {
+                        res = runtime.sync_once(next_batch.clone(), &sync_options) => {
+                            match res {
+                                Ok(response_next_batch) => {
+                                    next_batch = Some(response_next_batch);
+                                    consecutive_failures = 0;
+                                    
+                                    if !initial_sync_done {
+                                        initial_sync_done = true;
+                                        emit_runtime_log(&logger, "info", "Initial Matrix sync completed");
+                                        ready_callback.call((), ThreadsafeFunctionCallMode::NonBlocking);
+                                    }
+                                }
+                                Err(error) => {
+                                    consecutive_failures += 1;
+                                    let delay = if consecutive_failures <= 3 { 1 } else { 10 };
+                                    let sync_type = if initial_sync_done { "sync" } else { "initial sync" };
+                                    emit_runtime_log(
+                                        &logger,
+                                        "warn",
+                                        format!("Matrix {sync_type} failed: {error}; retrying in {delay}s"),
+                                    );
+                                    tokio::select! {
+                                        _ = tokio::time::sleep(Duration::from_secs(delay)) => {}
+                                        _ = shutdown_notify.notified() => { break; }
+                                    }
+                                }
                             }
                         }
-                        Err(error) => {
-                            consecutive_failures += 1;
-                            let delay = if consecutive_failures <= 3 { 1 } else { 10 };
-                            let sync_type = if initial_sync_done { "sync" } else { "initial sync" };
-                            emit_runtime_log(
-                                &logger,
-                                "warn",
-                                format!("Matrix {sync_type} failed: {error}; retrying in {delay}s"),
-                            );
-                            tokio::time::sleep(Duration::from_secs(delay)).await;
+                        _ = shutdown_notify.notified() => {
+                            break;
                         }
                     }
                 }
@@ -327,13 +340,13 @@ impl MatrixBot {
 
     #[napi]
     pub async fn send_text(&self, room_id: String, body: String) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_plain_notice(&room, body).await.map_err(to_napi_error)
     }
 
     #[napi]
     pub async fn send_markdown(&self, room_id: String, body: String) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_markdown_notice(&room, body)
             .await
             .map_err(to_napi_error)
@@ -371,7 +384,7 @@ impl MatrixBot {
 
     #[napi]
     pub async fn get_event(&self, room_id: String, event_id: String) -> Result<String> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         use matrix_sdk::ruma::EventId;
         let event_id = EventId::parse(&event_id).map_err(|e| napi::Error::new(napi::Status::InvalidArg, e.to_string()))?;
         let event = room.event(&event_id, None).await.map_err(|e| napi::Error::new(napi::Status::GenericFailure, e.to_string()))?;
@@ -380,7 +393,7 @@ impl MatrixBot {
 
     #[napi]
     pub async fn send_poll(&self, room_id: String, poll: NativePoll) -> Result<String> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_poll(
             &room,
             Poll {
@@ -394,7 +407,11 @@ impl MatrixBot {
                     })
                     .collect(),
                 kind: poll.kind,
-                max_selections: poll.max_selections.and_then(|v| u64::try_from(v).ok()),
+                max_selections: match poll.max_selections {
+                    Some(v) if v < 0 => return Err(Error::from_reason("max_selections cannot be negative")),
+                    Some(v) => Some(v as u64),
+                    None => None,
+                },
                 action_id: poll.action_id,
             },
         )
@@ -409,7 +426,7 @@ impl MatrixBot {
         poll_event_id: String,
         fallback_text: Option<String>,
     ) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         close_poll(
             &room,
             owned_event_id(poll_event_id)?,
@@ -421,7 +438,7 @@ impl MatrixBot {
 
     #[napi]
     pub async fn reply_text(&self, room_id: String, event_id: String, body: String) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_plain_reply(&room, owned_event_id(event_id)?, body)
             .await
             .map_err(to_napi_error)
@@ -434,7 +451,7 @@ impl MatrixBot {
         event_id: String,
         body: String,
     ) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_markdown_reply(&room, owned_event_id(event_id)?, body)
             .await
             .map_err(to_napi_error)
@@ -442,31 +459,31 @@ impl MatrixBot {
 
     #[napi]
     pub async fn react(&self, room_id: String, event_id: String, emoji: String) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_reaction(&room, owned_event_id(event_id)?, emoji).await.map_err(to_napi_error)
     }
 
     #[napi]
     pub async fn redact(&self, room_id: String, event_id: String, reason: Option<String>) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         redact(&room, &owned_event_id(event_id)?, reason.as_deref()).await.map_err(to_napi_error)
     }
 
     #[napi]
     pub async fn download_media(&self, room_id: String, event_id: String) -> Result<Buffer> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         let data = download_media_from_room_event(&room, owned_event_id(event_id)?)
             .await
             .map_err(to_napi_error)?;
         Ok(Buffer::from(data))
     }
 
-    fn room(&self, room_id: String) -> Result<Room> {
+    async fn room(&self, room_id: String) -> Result<Room> {
         let room_id = OwnedRoomId::try_from(room_id).map_err(to_napi_error)?;
         let client = self
             .client
             .lock()
-            .map_err(|_| Error::from_reason("Matrix client mutex poisoned"))?
+            .await
             .clone()
             .ok_or_else(|| Error::from_reason("Matrix bot is not listening yet"))?;
 
@@ -481,7 +498,7 @@ impl MatrixBot {
         attachment: NativeMediaAttachment,
         kind: MediaAttachmentKind,
     ) -> Result<()> {
-        let room = self.room(room_id)?;
+        let room = self.room(room_id).await?;
         send_media_attachment(
             &room,
             MediaAttachment {
@@ -614,6 +631,21 @@ fn register_invite_handler(client: Client, config: Arc<MatrixBotConfig>, logger:
     );
 }
 
+fn dispatch_incoming_message(
+    message: IncomingMessage,
+    client: &Client,
+    command_groups: &[CoreCommandGroup],
+    listeners: &[CoreListener],
+    callback: &MessageCallback,
+) {
+    let Some(user_id) = client.user_id() else { return; };
+    let bot_user_id = user_id.as_str().to_owned();
+    if should_skip_js_dispatch(command_groups, listeners, &message, bot_user_id) {
+        return;
+    }
+    callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
+}
+
 fn register_event_handlers(
     client: Client,
     command_groups: Arc<Vec<CoreCommandGroup>>,
@@ -677,31 +709,18 @@ fn register_message_handler(
         move |event: OriginalSyncRoomMessageEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
-
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
                 match incoming_message_from_room_event(&event, &room).await {
                     Ok(Some(message)) => {
-                        let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                        if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                            return;
-                        }
-
-                        callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
+                        dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
                     }
                     Ok(None) => {}
-                    Err(error) => emit_runtime_log(
-                        &logger,
-                        "warn",
-                        format!("message conversion failed: {error}"),
-                    ),
+                    Err(error) => emit_runtime_log(&logger, "warn", format!("message conversion failed: {error}")),
                 }
             }
         },
@@ -719,24 +738,19 @@ fn register_poll_handler(
         move |event: OriginalSyncPollStartEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
+                let message_opt = Some(incoming_poll_from_event(&event, &room));
+                if let Some(message) = message_opt {
+                    dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
+                    if "dispatched poll event to JavaScript" != "" {
+                        emit_runtime_log(&logger, "debug", "dispatched poll event to JavaScript");
+                    }
                 }
-
-                let message = incoming_poll_from_event(&event, &room);
-                let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                    return;
-                }
-
-                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
-                emit_runtime_log(&logger, "debug", "dispatched poll event to JavaScript");
             }
         },
     );
@@ -753,28 +767,18 @@ fn register_unstable_poll_handler(
         move |event: OriginalSyncUnstablePollStartEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
-                }
-
-                if let Some(message) = incoming_unstable_poll_from_event(&event, &room) {
-                    let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                    if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                        return;
+                let message_opt = incoming_unstable_poll_from_event(&event, &room);
+                if let Some(message) = message_opt {
+                    dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
+                    if "dispatched unstable poll event to JavaScript" != "" {
+                        emit_runtime_log(&logger, "debug", "dispatched unstable poll event to JavaScript");
                     }
-
-                    callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
-                    emit_runtime_log(
-                        &logger,
-                        "debug",
-                        "dispatched unstable poll event to JavaScript",
-                    );
                 }
             }
         },
@@ -792,24 +796,19 @@ fn register_poll_response_handler(
         move |event: OriginalSyncPollResponseEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
+                let message_opt = Some(incoming_poll_response_from_event(&event, &room));
+                if let Some(message) = message_opt {
+                    dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
+                    if "dispatched poll response event to JavaScript" != "" {
+                        emit_runtime_log(&logger, "debug", "dispatched poll response event to JavaScript");
+                    }
                 }
-
-                let message = incoming_poll_response_from_event(&event, &room);
-                let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                    return;
-                }
-
-                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
-                emit_runtime_log(&logger, "debug", "dispatched poll response event to JavaScript");
             }
         },
     );
@@ -826,28 +825,19 @@ fn register_unstable_poll_response_handler(
         move |event: OriginalSyncUnstablePollResponseEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
+                let message_opt = Some(incoming_unstable_poll_response_from_event(&event, &room));
+                if let Some(message) = message_opt {
+                    dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
+                    if "dispatched unstable poll response event to JavaScript" != "" {
+                        emit_runtime_log(&logger, "debug", "dispatched unstable poll response event to JavaScript");
+                    }
                 }
-
-                let message = incoming_unstable_poll_response_from_event(&event, &room);
-                let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                    return;
-                }
-
-                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
-                emit_runtime_log(
-                    &logger,
-                    "debug",
-                    "dispatched unstable poll response event to JavaScript",
-                );
             }
         },
     );
@@ -864,24 +854,19 @@ fn register_poll_end_handler(
         move |event: OriginalSyncPollEndEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
+                let message_opt = Some(incoming_poll_end_from_event(&event, &room));
+                if let Some(message) = message_opt {
+                    dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
+                    if "dispatched poll end event to JavaScript" != "" {
+                        emit_runtime_log(&logger, "debug", "dispatched poll end event to JavaScript");
+                    }
                 }
-
-                let message = incoming_poll_end_from_event(&event, &room);
-                let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                    return;
-                }
-
-                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
-                emit_runtime_log(&logger, "debug", "dispatched poll end event to JavaScript");
             }
         },
     );
@@ -898,28 +883,19 @@ fn register_unstable_poll_end_handler(
         move |event: OriginalSyncUnstablePollEndEvent, room: Room, client: Client| {
             let callback = Arc::clone(&callback);
             let logger = logger.clone();
+            let command_groups = command_groups.clone();
+            let listeners = listeners.clone();
             async move {
-                if room.state() != RoomState::Joined {
-                    return;
-                }
+                if room.state() != RoomState::Joined { return; }
+                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) { return; }
 
-                if Some(event.sender.as_ref()) == client.user_id().map(|id| id.as_str()) {
-                    return;
+                let message_opt = Some(incoming_unstable_poll_end_from_event(&event, &room));
+                if let Some(message) = message_opt {
+                    dispatch_incoming_message(message, &client, &command_groups, &listeners, &callback);
+                    if "dispatched unstable poll end event to JavaScript" != "" {
+                        emit_runtime_log(&logger, "debug", "dispatched unstable poll end event to JavaScript");
+                    }
                 }
-
-                let message = incoming_unstable_poll_end_from_event(&event, &room);
-                let Some(user_id) = client.user_id() else { return; };
-                        let bot_user_id = user_id.as_str().to_owned();
-                if should_skip_js_dispatch(&command_groups, &listeners, &message, bot_user_id) {
-                    return;
-                }
-
-                callback.call(message.into(), ThreadsafeFunctionCallMode::NonBlocking);
-                emit_runtime_log(
-                    &logger,
-                    "debug",
-                    "dispatched unstable poll end event to JavaScript",
-                );
             }
         },
     );
