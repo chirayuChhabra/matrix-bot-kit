@@ -8,3 +8,4 @@ node_modules/
 /.matrix-bot-sdk/
 /bot-testing/
 /fullDocs.md
+/cli-testing/
