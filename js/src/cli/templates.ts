@@ -1,4 +1,4 @@
-export function getPackageJson(botName: string): string {
+export function getPackageJson(botName: string, sdkVersion: string): string {
 	return `{
 	"name": "${botName}",
 	"version": "1.0.0",
@@ -10,7 +10,7 @@ export function getPackageJson(botName: string): string {
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"matrix-bot-kit": "latest"
+		"matrix-bot-kit": "^${sdkVersion}"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.1.0",
@@ -39,6 +39,7 @@ export function getTsConfig(): string {
 
 export function getBotTs(): string {
 	return `import { MatrixBot } from "matrix-bot-kit";
+import { exampleModule } from "./modules/example.js";
 
 export const bot = new MatrixBot({
 	homeserverUrl: Bun.env.MATRIX_HOMESERVER_URL || "https://matrix.org",
@@ -52,6 +53,8 @@ export const bot = new MatrixBot({
 		},
 	},
 });
+
+bot.use(exampleModule);
 `;
 }
 
@@ -65,34 +68,26 @@ export const loggerMiddleware = async (ctx: Context, next: Next) => {
 `;
 }
 
-export function getEchoHandlerTs(): string {
-	return `import type { Context } from "matrix-bot-kit";
+export function getModuleTs(moduleName: string): string {
+	return `import { type MatrixBot } from "matrix-bot-kit";
 
-export const echoHandler = async (ctx: Context) => {
-	const text = ctx.message.body.replace("!echo", "").trim();
-	await ctx.message.react("✅");
-	await ctx.reply.text(text || "You didn't say anything!");
-};
-`;
-}
+export function ${moduleName}Module(bot: MatrixBot) {
+	// Commands are attached directly to the bot
+	bot.command({ command: "${moduleName}", description: "Example command for ${moduleName}" }, async (ctx) => {
+		await ctx.reply.text("Hello from ${moduleName} module!");
+	});
 
-export function getEchoIndexTs(): string {
-	return `import { bot } from "../../bot.js";
-import { loggerMiddleware } from "../../middlewares/logger.js";
-import { echoHandler } from "./handler.js";
-
-export function registerEchoModule() {
-	bot.command("!echo", loggerMiddleware, echoHandler);
+	// Background tasks use our new clean schedule options
+	bot.on.schedule({ everyDay: 1 }, async (ctx) => {
+		// This runs automatically once every day!
+		// await ctx.send.text("Good morning everyone!");
+	});
 }
 `;
 }
 
 export function getIndexTs(botName: string): string {
 	return `import { bot } from "./bot.js";
-import { registerEchoModule } from "./modules/echo/index.js";
-
-// Register all modules
-registerEchoModule();
 
 bot.start(() => {
 	console.log("🤖 ${botName} is up and running!");
