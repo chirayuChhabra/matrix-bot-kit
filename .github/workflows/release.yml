@@ -116,10 +116,14 @@ jobs:
 
       - name: Publish platform packages
         run: |
+          TAG_ARG=""
+          if [[ "${{ github.ref_name }}" == *"alpha-exp"* ]]; then
+            TAG_ARG="--tag alpha-exp"
+          fi
           for dir in js/npm/*/; do
             if [ -f "$dir/package.json" ]; then
               echo "Publishing $dir..."
-              (cd "$dir" && npm publish --access public)
+              (cd "$dir" && npm publish --access public $TAG_ARG)
             fi
           done
         env:
@@ -127,7 +131,11 @@ jobs:
 
       - name: Publish main package
         run: |
+          TAG_ARG=""
+          if [[ "${{ github.ref_name }}" == *"alpha-exp"* ]]; then
+            TAG_ARG="--tag alpha-exp"
+          fi
           cd js
-          npm publish --access public
+          npm publish --access public $TAG_ARG
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

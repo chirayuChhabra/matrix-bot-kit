@@ -1,6 +1,6 @@
 {
 	"name": "matrix-bot-kit",
-	"version": "0.2.0",
+	"version": "0.2.1-alpha-exp.0",
 	"description": "A modern SDK for creating Matrix bots",
 	"author": "Chirayu Chhabra",
 	"license": "MIT",
