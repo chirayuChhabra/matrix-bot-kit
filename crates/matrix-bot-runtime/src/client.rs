@@ -4,6 +4,8 @@ use matrix_sdk::{
     store::RoomLoadSettings,
 };
 use tokio::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use url::Url;
 
 use crate::{MatrixRuntimeError, RuntimeResult, SyncLoopOptions, sync::sync_settings};
@@ -80,12 +82,13 @@ async fn login_or_restore(client: &Client, config: &MatrixBotConfig) -> RuntimeR
 
     if let Ok(session_json) = fs::read_to_string(&session_path).await {
         let session: MatrixSession = serde_json::from_str(&session_json)?;
-        if client
+        if let Err(e) = client
             .matrix_auth()
             .restore_session(session, RoomLoadSettings::default())
             .await
-            .is_ok()
         {
+            println!("Warning: Failed to restore session: {}. Re-authenticating...", e);
+        } else {
             return Ok(());
         }
     }
@@ -99,6 +102,16 @@ async fn login_or_restore(client: &Client, config: &MatrixBotConfig) -> RuntimeR
 
     let session: MatrixSession = (&response).into();
     fs::write(&session_path, serde_json::to_string_pretty(&session)?).await?;
+    
+    #[cfg(unix)]
+    {
+        if let Ok(metadata) = fs::metadata(&session_path).await {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o600);
+            let _ = fs::set_permissions(&session_path, perms).await;
+        }
+    }
+    
     Ok(())
 }
 
