@@ -333,6 +333,29 @@ fn message_parts(msgtype: &MessageType) -> Option<(String, String, Option<MediaM
                 encrypted: matches!(video.source, MediaSource::Encrypted(_)),
             }),
         )),
+        MessageType::Audio(audio) => Some((
+            "audio".to_owned(),
+            audio.body.trim().to_owned(),
+            Some(MediaMessage {
+                kind: "audio".to_owned(),
+                filename: audio.body.clone(),
+                caption: None,
+                mxc_uri: plain_mxc_uri(&audio.source),
+                mimetype: audio.info.as_ref().and_then(|info| info.mimetype.clone()),
+                size: audio
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.size.map(Into::into)),
+                width: None,
+                height: None,
+                duration_ms: audio
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.duration)
+                    .map(duration_millis),
+                encrypted: matches!(audio.source, MediaSource::Encrypted(_)),
+            }),
+        )),
         _ => None,
     }
 }
