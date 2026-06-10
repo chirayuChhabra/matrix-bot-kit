@@ -363,7 +363,10 @@ fn poll_from_content(content: &PollStartEventContent) -> PollMessage {
             .find_plain()
             .unwrap_or_default()
             .to_owned(),
-        kind: content.poll.kind.as_ref().to_owned(),
+        kind: match content.poll.kind.as_ref() {
+            "m.poll.undisclosed" | "org.matrix.msc3381.poll.undisclosed" => "undisclosed".to_owned(),
+            _ => "disclosed".to_owned(),
+        },
         max_selections: content.poll.max_selections.into(),
         answers: content
             .poll
@@ -380,7 +383,10 @@ fn poll_from_content(content: &PollStartEventContent) -> PollMessage {
 fn unstable_poll_from_content(content: &UnstablePollStartContentBlock) -> PollMessage {
     PollMessage {
         question: content.question.text.clone(),
-        kind: content.kind.as_ref().to_owned(),
+        kind: match content.kind.as_ref() {
+            "m.poll.undisclosed" | "org.matrix.msc3381.poll.undisclosed" => "undisclosed".to_owned(),
+            _ => "disclosed".to_owned(),
+        },
         max_selections: content.max_selections.into(),
         answers: content
             .answers
