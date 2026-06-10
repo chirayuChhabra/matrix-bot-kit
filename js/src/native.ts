@@ -1,11 +1,12 @@
 import { createRequire } from "node:module";
 
-type NativeMatrixBot = {
+export type NativeMatrixBot = {
 	start(
 		onMessage: (message: NativeIncomingMessage) => void,
 		onLog: (event: NativeRuntimeLog) => void,
 		onReady: () => void,
 	): void;
+	stop(): void;
 	sendText(roomId: string, body: string): Promise<void>;
 	sendMarkdown(roomId: string, body: string): Promise<void>;
 	sendImage(roomId: string, attachment: NativeMediaAttachment): Promise<void>;
@@ -73,12 +74,13 @@ export type MatrixMessageType =
 	| "image"
 	| "file"
 	| "video"
+	| "audio"
 	| "poll"
 	| "poll_response"
 	| "poll_end";
 
 export type NativeMediaMessage = {
-	kind: "image" | "file" | "video";
+	kind: "image" | "file" | "video" | "audio";
 	filename: string;
 	caption?: string;
 	mxcUri?: string;
@@ -113,6 +115,7 @@ export type NativePoll = {
 	answers: NativePollAnswer[];
 	kind?: "disclosed" | "undisclosed";
 	maxSelections?: number;
+	actionId?: string;
 };
 
 export type NativePollResponseMessage = {
