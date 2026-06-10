@@ -1,6 +1,6 @@
 {
   "name": "matrix-bot-kit-darwin-arm64",
-  "version": "0.2.1-alpha-exp.0",
+  "version": "0.2.1-alpha-exp.1",
   "cpu": [
     "arm64"
   ],

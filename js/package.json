@@ -1,6 +1,6 @@
 {
   "name": "matrix-bot-kit",
-  "version": "0.2.1-alpha-exp.0",
+  "version": "0.2.1-alpha-exp.1",
   "description": "A modern SDK for creating Matrix bots",
   "author": "Chirayu Chhabra",
   "license": "MIT",
@@ -57,12 +57,12 @@
     "@types/loglevel": "^1.5.4"
   },
   "optionalDependencies": {
-    "matrix-bot-kit-darwin-arm64": "0.2.1-alpha-exp.0",
-    "matrix-bot-kit-darwin-x64": "0.2.1-alpha-exp.0",
-    "matrix-bot-kit-linux-arm64-gnu": "0.2.1-alpha-exp.0",
-    "matrix-bot-kit-linux-x64-gnu": "0.2.1-alpha-exp.0",
-    "matrix-bot-kit-win32-arm64-msvc": "0.2.1-alpha-exp.0",
-    "matrix-bot-kit-win32-x64-msvc": "0.2.1-alpha-exp.0"
+    "matrix-bot-kit-darwin-arm64": "0.2.1-alpha-exp.1",
+    "matrix-bot-kit-darwin-x64": "0.2.1-alpha-exp.1",
+    "matrix-bot-kit-linux-arm64-gnu": "0.2.1-alpha-exp.1",
+    "matrix-bot-kit-linux-x64-gnu": "0.2.1-alpha-exp.1",
+    "matrix-bot-kit-win32-arm64-msvc": "0.2.1-alpha-exp.1",
+    "matrix-bot-kit-win32-x64-msvc": "0.2.1-alpha-exp.1"
   },
   "dependencies": {
     "@clack/prompts": "^1.5.1",
