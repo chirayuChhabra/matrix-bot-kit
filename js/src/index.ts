@@ -193,7 +193,12 @@ export type WebhookOptions = {
 };
 
 export type ScheduleOptions = {
-	everyMs: number;
+	everyMs?: number;
+	everySec?: number;
+	everyMin?: number;
+	everyHr?: number;
+	everyDay?: number;
+	at?: Date | string;
 };
 
 export type MediaMessage = {
@@ -357,6 +362,10 @@ export type ListenerExternalTrigger = {
 export type ListenerScheduleTrigger = {
 	kind: "schedule";
 	everyMs?: number;
+	everySec?: number;
+	everyMin?: number;
+	everyHr?: number;
+	everyDay?: number;
 	at?: Date | string;
 	source?: string;
 };
@@ -961,7 +970,7 @@ export class MatrixBot {
 	}
 
 	schedule(
-		options: { everyMs?: number; at?: string | Date },
+		options: ScheduleOptions,
 		...pipeline: [...ListenerMiddleware[], ListenerHandler]
 	): this {
 		const name = `schedule-${++this.scheduleListenerCount}`;
@@ -1799,17 +1808,27 @@ function normalizeListenerTriggers(
 		}
 
 		if (trigger.kind === "schedule") {
-			if (trigger.everyMs === undefined && trigger.at === undefined) {
-				throw new Error("schedule listener trigger requires `everyMs` or `at`");
+			let everyMs = trigger.everyMs;
+			if (everyMs === undefined) {
+				if (trigger.everyDay !== undefined) everyMs = trigger.everyDay * 24 * 60 * 60 * 1000;
+				else if (trigger.everyHr !== undefined) everyMs = trigger.everyHr * 60 * 60 * 1000;
+				else if (trigger.everyMin !== undefined) everyMs = trigger.everyMin * 60 * 1000;
+				else if (trigger.everySec !== undefined) everyMs = trigger.everySec * 1000;
 			}
-			if (trigger.everyMs !== undefined && trigger.everyMs <= 0) {
+
+			if (everyMs === undefined && trigger.at === undefined) {
+				throw new Error("schedule listener trigger requires an interval (everyMs, everyMin, etc.) or `at`");
+			}
+			if (everyMs !== undefined && everyMs <= 0) {
 				throw new Error(
-					"schedule listener trigger `everyMs` must be greater than 0",
+					"schedule listener trigger interval must be greater than 0",
 				);
 			}
 
 			return {
-				...trigger,
+				kind: "schedule",
+				everyMs,
+				at: trigger.at,
 				source: trigger.source ?? "schedule",
 			};
 		}
