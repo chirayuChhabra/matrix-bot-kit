@@ -1,0 +1,54 @@
+name: CI
+
+env:
+  DEBUG: napi:*
+  APP_NAME: matrix-bot-kit
+  MACOSX_DEPLOYMENT_TARGET: '10.13'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    branches: [ "main", "experimental/*" ]
+  pull_request:
+    branches: [ "main", "experimental/*" ]
+
+jobs:
+  test:
+    name: Test and Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: cd js && bun run typecheck
+
+      - name: JS SDK Tests
+        run: cd js && bun test tests native-tests
+
+      - name: Build JS
+        run: cd js && bun run build
+
+      - name: Smoke test CLI
+        run: node js/dist/cli.js --version
+
+      - name: Root E2E Tests
+        run: bun test tests
+
+      - name: Rust Core Tests
+        run: cargo test --workspace
