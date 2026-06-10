@@ -81,6 +81,12 @@ async function handleInit(args: string[]) {
 		targetDir = dirName as string;
 	}
 
+	targetDir = targetDir.trim();
+	if (!targetDir || targetDir.includes("..")) {
+		cancel("Invalid target directory.");
+		process.exit(1);
+	}
+
 	const wantsDocker = await confirm({
 		message: "Do you want to generate Dockerfiles for deployment?",
 		initialValue: true,
@@ -124,9 +130,9 @@ async function handleInit(args: string[]) {
 			existing.scripts = { ...(existing.scripts || {}), ...generated.scripts };
 			existing.dependencies = { ...(existing.dependencies || {}), ...generated.dependencies };
 			existing.devDependencies = { ...(existing.devDependencies || {}), ...generated.devDependencies };
-			mergedPackageJsonStr = JSON.stringify(existing, null, 2) + "\\n";
+			mergedPackageJsonStr = JSON.stringify(existing, null, 2) + "\n";
 		} catch (e) {
-			// Ignore read/parse errors and use default
+			console.log(picocolors.yellow("Warning: Failed to merge package.json, using default."));
 		}
 		await writeFile(packageJsonPath, mergedPackageJsonStr);
 
@@ -142,7 +148,7 @@ async function handleInit(args: string[]) {
 			if (!existing.include.includes("src/**/*")) existing.include.push("src/**/*");
 			mergedTsConfigStr = JSON.stringify(existing, null, 2) + "\n";
 		} catch (e) {
-			// Ignore read/parse errors and use default
+			console.log(picocolors.yellow("Warning: Failed to merge tsconfig.json, using default."));
 		}
 		await writeFile(tsconfigPath, mergedTsConfigStr);
 
@@ -153,11 +159,10 @@ async function handleInit(args: string[]) {
 
 		if (wantsDocker) {
 			await safeWriteFile(join(targetDir, "Dockerfile"), getDockerfile());
-			await safeWriteFile(join(targetDir, "docker-compose.yml"), getDockerCompose(pkgName));
+			await safeWriteFile(join(targetDir, "docker-compose.yaml"), getDockerCompose(pkgName));
 		}
 		
 		await safeWriteFile(join(targetDir, ".env.example"), getEnvExample());
-		await safeWriteFile(join(targetDir, ".env"), getEnvExample());
 
 		if (wantsCI) {
 			await safeWriteFile(
@@ -168,13 +173,13 @@ async function handleInit(args: string[]) {
 		
 		await safeWriteFile(join(targetDir, "README.md"), getReadme(botName));
 
-		// Gitignore via bunx
-		try {
-			await execAsync("bunx gitignore node", { cwd: targetDir });
-			await appendFile(join(targetDir, ".gitignore"), "\n# Custom\n.env\ndata/\n");
-		} catch (e) {
-			console.log(picocolors.yellow("Warning: Failed to generate .gitignore using bunx."));
-		}
+		// Gitignore
+		const gitignoreContent = `node_modules/
+dist/
+.env
+data/
+`;
+		await safeWriteFile(join(targetDir, ".gitignore"), gitignoreContent);
 
 		s.stop("Files generated!");
 
@@ -239,8 +244,20 @@ async function handleGenerateModule(args: string[]) {
 			let botTsContent = await readFile(botTsPath, "utf-8");
 			
 			const importStatement = `import { ${moduleName}Module } from "./modules/${moduleName}.js";\n`;
-			botTsContent = importStatement + botTsContent;
-			botTsContent += `\nbot.use(${moduleName}Module);\n`;
+			if (!botTsContent.includes(importStatement.trim())) {
+				const lastImportIndex = botTsContent.lastIndexOf("import ");
+				if (lastImportIndex !== -1) {
+					const endOfLastImport = botTsContent.indexOf("\n", lastImportIndex);
+					botTsContent = botTsContent.slice(0, endOfLastImport + 1) + importStatement + botTsContent.slice(endOfLastImport + 1);
+				} else {
+					botTsContent = importStatement + botTsContent;
+				}
+			}
+
+			const useStatement = `\nbot.use(${moduleName}Module);\n`;
+			if (!botTsContent.includes(`bot.use(${moduleName}Module)`)) {
+				botTsContent += useStatement;
+			}
 
 			await writeFile(botTsPath, botTsContent);
 		} else {
@@ -288,4 +305,7 @@ async function main() {
 	}
 }
 
-main().catch(console.error);
+main().catch((err) => {
+	console.error(err);
+	process.exit(1);
+});

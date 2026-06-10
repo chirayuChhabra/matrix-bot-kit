@@ -41,6 +41,11 @@ export function getBotTs(): string {
 	return `import { MatrixBot } from "matrix-bot-kit";
 import { exampleModule } from "./modules/example.js";
 
+const maintenancePassword = Bun.env.MAINTENANCE_PASSWORD;
+if (!maintenancePassword) {
+	throw new Error("MAINTENANCE_PASSWORD is required in .env");
+}
+
 export const bot = new MatrixBot({
 	homeserverUrl: Bun.env.MATRIX_HOMESERVER_URL || "https://matrix.org",
 	username: Bun.env.MATRIX_USERNAME || "",
@@ -49,7 +54,7 @@ export const bot = new MatrixBot({
 	admin: Bun.env.MATRIX_ADMIN_ID ? [Bun.env.MATRIX_ADMIN_ID] : [],
 	config: {
 		utility: {
-			maintenancePassword: Bun.env.MAINTENANCE_PASSWORD || "password",
+			maintenancePassword,
 		},
 	},
 });
@@ -73,14 +78,14 @@ export function getModuleTs(moduleName: string): string {
 
 export function ${moduleName}Module(bot: MatrixBot) {
 	// Commands are attached directly to the bot
-	bot.command({ command: "${moduleName}", description: "Example command for ${moduleName}" }, async (ctx) => {
+	bot.command("!${moduleName}", async (ctx) => {
 		await ctx.reply.text("Hello from ${moduleName} module!");
 	});
 
 	// Background tasks use our new clean schedule options
-	bot.on.schedule({ everyDay: 1 }, async (ctx) => {
+	bot.on.schedule({ everyDay: 1 }, async (event) => {
 		// This runs automatically once every day!
-		// await ctx.send.text("Good morning everyone!");
+		// console.log("Scheduled task ran!", event);
 	});
 }
 `;
@@ -119,9 +124,7 @@ CMD ["bun", "run", "start"]
 }
 
 export function getDockerCompose(botName: string): string {
-	return `version: "3.8"
-
-services:
+	return `services:
   bot:
     build: .
     container_name: ${botName}
@@ -200,7 +203,7 @@ jobs:
       # to automatically deploy to your server upon pushing to main!
       #
       # - name: Prepare Production Compose File
-      #   run: sed -i "s|build: .|image: ghcr.io/\${{ github.repository }}:latest|" docker-compose.yml
+      #   run: sed -i "s|build: .|image: ghcr.io/\${{ github.repository }}:latest|" docker-compose.yaml
       #
       # - name: Copy Compose File to Server
       #   uses: appleboy/scp-action@v0.1.7
@@ -208,7 +211,7 @@ jobs:
       #     host: \${{ secrets.SERVER_HOST }}
       #     username: \${{ secrets.SERVER_USER }}
       #     key: \${{ secrets.SERVER_SSH_KEY }}
-      #     source: "docker-compose.yml"
+      #     source: "docker-compose.yaml"
       #     target: "/opt/\${{ github.event.repository.name }}"
       #
       # - name: Deploy to Server via SSH
@@ -264,7 +267,7 @@ From now on, **never manually touch your server again.**
 When you want to deploy a new feature, simply commit and push to \`main\`. GitHub Actions will automatically:
 1. Typecheck your code.
 2. Build an optimized Docker image and push it securely to \`ghcr.io\`.
-3. Securely transport the latest \`docker-compose.yml\` to your server.
+3. Securely transport the latest \`docker-compose.yaml\` to your server.
 4. Inject a temporary \`GITHUB_TOKEN\` to pull the private image.
 5. Hot-swap the containers with zero downtime.
 `;
