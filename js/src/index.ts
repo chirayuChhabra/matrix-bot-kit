@@ -412,7 +412,7 @@ export type CommandOptions<TConfig extends CommandConfig = CommandConfig> = {
 	config?: TConfig;
 };
 
-export type MatrixBotModule = (bot: MatrixBot) => void | Promise<void>;
+export type MatrixBotModule = (bot: MatrixBot) => void;
 
 /**
  * The main entrypoint for the Matrix Bot SDK.
@@ -1814,10 +1814,16 @@ function normalizeListenerTriggers(
 
 		if (trigger.kind === "schedule") {
 			let everyMs: number | undefined = undefined;
-			if (trigger.everyDay !== undefined) everyMs = trigger.everyDay * 24 * 60 * 60 * 1000;
-			else if (trigger.everyHr !== undefined) everyMs = trigger.everyHr * 60 * 60 * 1000;
-			else if (trigger.everyMin !== undefined) everyMs = trigger.everyMin * 60 * 1000;
-			else if (trigger.everySec !== undefined) everyMs = trigger.everySec * 1000;
+			let definedCount = 0;
+
+			if (trigger.everyDay !== undefined) { everyMs = trigger.everyDay * 24 * 60 * 60 * 1000; definedCount++; }
+			if (trigger.everyHr !== undefined) { everyMs = trigger.everyHr * 60 * 60 * 1000; definedCount++; }
+			if (trigger.everyMin !== undefined) { everyMs = trigger.everyMin * 60 * 1000; definedCount++; }
+			if (trigger.everySec !== undefined) { everyMs = trigger.everySec * 1000; definedCount++; }
+
+			if (definedCount > 1) {
+				throw new Error("schedule listener trigger can only use one interval type (e.g. use only everyMin, not both everyMin and everySec)");
+			}
 
 			if (everyMs === undefined && trigger.at === undefined) {
 				throw new Error("schedule listener trigger requires an interval (everySec, everyMin, etc.) or `at`");
