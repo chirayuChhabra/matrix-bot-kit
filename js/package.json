@@ -26,6 +26,10 @@
 		}
 	},
 	"main": "./dist/index.cjs",
+	"bin": {
+		"mb": "./dist/cli.js",
+		"matrix-bot": "./dist/cli.js"
+	},
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
@@ -61,6 +65,8 @@
 		"matrix-bot-kit-win32-x64-msvc": "0.2.0"
 	},
 	"dependencies": {
-		"loglevel": "^1.9.2"
+		"@clack/prompts": "^1.5.1",
+		"loglevel": "^1.9.2",
+		"picocolors": "^1.1.1"
 	}
 }
