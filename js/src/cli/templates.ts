@@ -1,0 +1,276 @@
+export function getPackageJson(botName: string): string {
+	return `{
+	"name": "${botName}",
+	"version": "1.0.0",
+	"description": "Matrix bot powered by matrix-bot-kit",
+	"type": "module",
+	"scripts": {
+		"start": "bun run src/index.ts",
+		"dev": "bun run --watch src/index.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"matrix-bot-kit": "latest"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.1.0",
+		"typescript": "^5.0.0"
+	}
+}
+`;
+}
+
+export function getTsConfig(): string {
+	return `{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"outDir": "./dist"
+	},
+	"include": ["src/**/*"]
+}
+`;
+}
+
+export function getBotTs(): string {
+	return `import { MatrixBot } from "matrix-bot-kit";
+
+export const bot = new MatrixBot({
+	homeserverUrl: Bun.env.MATRIX_HOMESERVER_URL || "https://matrix.org",
+	username: Bun.env.MATRIX_USERNAME || "",
+	password: Bun.env.MATRIX_PASSWORD || "",
+	recoveryKey: Bun.env.MATRIX_RECOVERY_KEY || "",
+	admin: Bun.env.MATRIX_ADMIN_ID ? [Bun.env.MATRIX_ADMIN_ID] : [],
+	config: {
+		utility: {
+			maintenancePassword: Bun.env.MAINTENANCE_PASSWORD || "password",
+		},
+	},
+});
+`;
+}
+
+export function getLoggerMiddlewareTs(): string {
+	return `import type { Context, Next } from "matrix-bot-kit";
+
+export const loggerMiddleware = async (ctx: Context, next: Next) => {
+	console.log(\`[Middleware] Received command: \${ctx.message.body}\`);
+	await next();
+};
+`;
+}
+
+export function getEchoHandlerTs(): string {
+	return `import type { Context } from "matrix-bot-kit";
+
+export const echoHandler = async (ctx: Context) => {
+	const text = ctx.message.body.replace("!echo", "").trim();
+	await ctx.message.react("✅");
+	await ctx.reply.text(text || "You didn't say anything!");
+};
+`;
+}
+
+export function getEchoIndexTs(): string {
+	return `import { bot } from "../../bot.js";
+import { loggerMiddleware } from "../../middlewares/logger.js";
+import { echoHandler } from "./handler.js";
+
+export function registerEchoModule() {
+	bot.command("!echo", loggerMiddleware, echoHandler);
+}
+`;
+}
+
+export function getIndexTs(botName: string): string {
+	return `import { bot } from "./bot.js";
+import { registerEchoModule } from "./modules/echo/index.js";
+
+// Register all modules
+registerEchoModule();
+
+bot.start(() => {
+	console.log("🤖 ${botName} is up and running!");
+});
+`;
+}
+
+export function getDockerfile(): string {
+	return `FROM oven/bun:1
+
+WORKDIR /app
+
+# Install tini for proper signal handling in Docker
+RUN apt-get update && apt-get install -y tini && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile || bun install
+
+# Copy source
+COPY . .
+
+# Use tini as the entrypoint so it forwards SIGTERM to bun
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Run the bot
+CMD ["bun", "run", "start"]
+`;
+}
+
+export function getDockerCompose(botName: string): string {
+	return `version: "3.8"
+
+services:
+  bot:
+    build: .
+    container_name: ${botName}
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+`;
+}
+
+export function getEnvExample(): string {
+	return `MATRIX_HOMESERVER_URL="https://matrix.org"
+MATRIX_USERNAME="@your_bot:matrix.org"
+MATRIX_PASSWORD="your_password"
+MATRIX_RECOVERY_KEY=""
+MATRIX_ADMIN_ID="@your_admin_user:matrix.org"
+MAINTENANCE_PASSWORD="your_maintenance_password"
+`;
+}
+
+export function getDeployWorkflow(): string {
+	return `name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Typecheck
+        run: bun run typecheck
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: \${{ github.actor }}
+          password: \${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/\${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- CONTINUOUS DEPLOYMENT (OPTIONAL) ---
+      # Uncomment the blocks below and add your secrets to GitHub
+      # to automatically deploy to your server upon pushing to main!
+      #
+      # - name: Prepare Production Compose File
+      #   run: sed -i "s|build: .|image: ghcr.io/\${{ github.repository }}:latest|" docker-compose.yml
+      #
+      # - name: Copy Compose File to Server
+      #   uses: appleboy/scp-action@v0.1.7
+      #   with:
+      #     host: \${{ secrets.SERVER_HOST }}
+      #     username: \${{ secrets.SERVER_USER }}
+      #     key: \${{ secrets.SERVER_SSH_KEY }}
+      #     source: "docker-compose.yml"
+      #     target: "/opt/\${{ github.event.repository.name }}"
+      #
+      # - name: Deploy to Server via SSH
+      #   uses: appleboy/ssh-action@v1.0.3
+      #   with:
+      #     host: \${{ secrets.SERVER_HOST }}
+      #     username: \${{ secrets.SERVER_USER }}
+      #     key: \${{ secrets.SERVER_SSH_KEY }}
+      #     script: |
+      #       cd /opt/\${{ github.event.repository.name }}
+      #       touch .env
+      #       echo "\${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u \${{ github.actor }} --password-stdin
+      #       docker compose pull
+      #       docker compose up -d
+`;
+}
+
+export function getReadme(botName: string): string {
+	return `# ${botName}
+
+A Matrix bot powered by [matrix-bot-kit](https://github.com/ChirayuChhabra/matrix-bot-sdk).
+
+## Development
+This bot uses [Bun](https://bun.sh/) as its runtime.
+
+1. Copy \`.env.example\` to \`.env\` and fill in your bot credentials.
+2. Run \`bun install\`
+3. Run \`bun run dev\` to start the bot with hot-reloading.
+
+## Production Deployment (Continuous Deployment)
+
+We use a production-grade GitOps workflow. Your code is completely decoupled from your server. **You do NOT need to clone this repository or log into GitHub on your server.**
+
+### Initial Setup (One-time only)
+1. Push this codebase to a GitHub repository.
+2. In your GitHub repository settings, go to **Secrets and variables -> Actions** and add:
+   - \`SERVER_HOST\`: The IP address of your VPS.
+   - \`SERVER_USER\`: Your SSH username (e.g., \`root\`).
+   - \`SERVER_SSH_KEY\`: The private SSH key used to access your server.
+3. Open \`.github/workflows/deploy.yml\` and uncomment the "Continuous Deployment" blocks at the bottom.
+4. Push to \`main\`! GitHub Actions will create a folder for your bot at \`/opt/{bot-name}\` on your server automatically.
+5. Finally, SSH into your server once to fill out your environment variables:
+   \`\`\`bash
+   nano /opt/YOUR_BOT_NAME/.env
+   # Paste your matrix credentials, then save and exit.
+   
+   cd /opt/YOUR_BOT_NAME
+   docker compose up -d
+   \`\`\`
+
+### The Workflow
+From now on, **never manually touch your server again.** 
+When you want to deploy a new feature, simply commit and push to \`main\`. GitHub Actions will automatically:
+1. Typecheck your code.
+2. Build an optimized Docker image and push it securely to \`ghcr.io\`.
+3. Securely transport the latest \`docker-compose.yml\` to your server.
+4. Inject a temporary \`GITHUB_TOKEN\` to pull the private image.
+5. Hot-swap the containers with zero downtime.
+`;
+}
