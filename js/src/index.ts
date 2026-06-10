@@ -414,6 +414,8 @@ export type CommandOptions<TConfig extends CommandConfig = CommandConfig> = {
 	config?: TConfig;
 };
 
+export type MatrixBotModule = (bot: MatrixBot) => void | Promise<void>;
+
 /**
  * The main entrypoint for the Matrix Bot SDK.
  * Use this class to configure the bot, register commands and listeners, and start the runtime.
@@ -702,11 +704,16 @@ export class MatrixBot {
 	}
 
 	/**
-	 * Registers a sub-bot (CommandGroup) or a Listener with the main bot.
-	 * @param component The CommandGroup or Listener to register.
+	 * Registers a sub-bot (CommandGroup), a Listener, or a functional module plugin with the main bot.
+	 * @param component The CommandGroup, Listener, or plugin function to register.
 	 * @returns This MatrixBot instance for chaining.
 	 */
-	use(component: CommandGroup | Listener): this {
+	use(component: CommandGroup | Listener | MatrixBotModule): this {
+		if (typeof component === "function") {
+			void component(this);
+			return this;
+		}
+
 		if (component instanceof Listener) {
 			return this.useListener(component);
 		}
