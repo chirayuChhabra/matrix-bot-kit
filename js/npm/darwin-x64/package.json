@@ -1,29 +1,29 @@
 {
-	"name": "matrix-bot-kit-darwin-x64",
-	"version": "0.2.0",
-	"cpu": [
-		"x64"
-	],
-	"main": "matrix-bot-kit.darwin-x64.node",
-	"files": [
-		"matrix-bot-kit.darwin-x64.node"
-	],
-	"description": "A modern SDK for creating Matrix bots",
-	"keywords": [
-		"matrix",
-		"bot",
-		"sdk",
-		"rust",
-		"napi",
-		"typescript"
-	],
-	"author": "Chirayu Chhabra",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
-	},
-	"os": [
-		"darwin"
-	]
+  "name": "matrix-bot-kit-darwin-x64",
+  "version": "0.2.1-alpha-exp.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "matrix-bot-kit.darwin-x64.node",
+  "files": [
+    "matrix-bot-kit.darwin-x64.node"
+  ],
+  "description": "A modern SDK for creating Matrix bots",
+  "keywords": [
+    "matrix",
+    "bot",
+    "sdk",
+    "rust",
+    "napi",
+    "typescript"
+  ],
+  "author": "Chirayu Chhabra",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
+  },
+  "os": [
+    "darwin"
+  ]
 }

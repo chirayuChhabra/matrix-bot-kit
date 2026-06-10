@@ -4,7 +4,7 @@
 	"type": "module",
 	"workspaces": [
 		"js",
-		"bot-testing"
+		"cli-testing/*"
 	],
 	"scripts": {
 		"test": "bun test js/tests tests",

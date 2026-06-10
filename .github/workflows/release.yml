@@ -114,6 +114,9 @@ jobs:
       - name: Copy README
         run: cp README.md js/
 
+      - name: Sync versions
+        run: cd js && bun run prepublishOnly
+
       - name: Publish platform packages
         run: |
           TAG_ARG=""
