@@ -1,47 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../src/index";
 
-// biome-ignore lint/suspicious/noExplicitAny: dynamic types
-function createMockContext(overrides: any = {}): Context {
-	const body = overrides.body ?? "hello";
-	const msgOverrides = overrides.message ?? {};
-	return {
-		message: {
-			id: "1",
-			type: "text",
-			rawBody: body,
-			body: body,
-			...msgOverrides,
-		},
-		room: {
-			id: "1",
-			isDirect: false,
-			...(overrides.room ?? {}),
-		},
-		sender: {
-			id: "@user:example.com",
-			isAdmin: () => false,
-			isModerator: () => false,
-			...(overrides.sender ?? {}),
-		},
-		send: {
-			text: async () => {},
-			markdown: async () => {},
-			media: async () => {},
-			image: async () => {},
-			file: async () => {},
-			video: async () => {},
-			poll: async () => {},
-		},
-		reply: {
-			text: async () => {},
-			markdown: async () => {},
-		},
-		downloadMedia: async () => Buffer.from([]),
-		...overrides,
-		// biome-ignore lint/suspicious/noExplicitAny: testing mocks
-	} as any as Context;
-}
+import { createMockContext } from "./mock_context";
 
 describe("MatrixBot Utility Commands", () => {
 	test("registers utility commands when utility is true", async () => {

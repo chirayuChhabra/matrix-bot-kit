@@ -1,49 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../src/index";
 
-function createMockContext(
-	overrides: Partial<Context> | Record<string, any> = {},
-): Context {
-	const body = (overrides as any).body ?? "hello";
-	const msgOverrides = (overrides as any).message ?? {};
-	return {
-		message: {
-			id: "1",
-			type: "text",
-			rawBody: body,
-			body: body,
-			...msgOverrides,
-		},
-		room: {
-			id: "1",
-			isDirect: false,
-			...(overrides.room ?? {}),
-		},
-		sender: {
-			id: "@user:example.com",
-			isAdmin: () => false,
-			isModerator: () => false,
-			...(overrides.sender ?? {}),
-		},
-		send: {
-			text: async () => {},
-			markdown: async () => {},
-			media: async () => {},
-			image: async () => {},
-			file: async () => {},
-			video: async () => {},
-			poll: async () => {},
-		},
-		reply: {
-			text: async () => {},
-			markdown: async () => {},
-		},
-		downloadMedia: async () => Buffer.from([]),
-		...overrides,
-	} as unknown as Context;
-}
-
-import { CommandGroup } from "../src/index";
+import { createMockContext } from "./mock_context";
 
 describe("JS SDK Hammering & Scale Tests", () => {
 	test("Hammering massive wildcard listener evaluations", async () => {
