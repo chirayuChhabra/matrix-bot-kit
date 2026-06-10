@@ -14,8 +14,8 @@ bot.on.message({ rooms: ["!myRoomId:example.com"] }, async (ctx) => {
 })
 
 // Background schedules
-bot.on.schedule({ everyMs: 1000 * 60 * 60 }, async (ctx) => {
-  await ctx.send.text("!myRoomId:example.com", "Hourly ping!")
+bot.on.schedule({ everyHr: 1 }, async () => {
+  await bot.sendText("!myRoomId:example.com", "Hourly ping!")
 })
 
 // Webhooks

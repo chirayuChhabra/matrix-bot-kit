@@ -44,7 +44,7 @@ const bot = new MatrixBot({
   timelineLimit: 20,
   config: {
     announceCommandGroupUsage: true,
-    utility: true, 
+    utility: { enabled: true, maintenancePassword: "password123" }, 
   },
 })
 
