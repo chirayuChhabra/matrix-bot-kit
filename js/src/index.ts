@@ -193,7 +193,6 @@ export type WebhookOptions = {
 };
 
 export type ScheduleOptions = {
-	everyMs?: number;
 	everySec?: number;
 	everyMin?: number;
 	everyHr?: number;
@@ -361,7 +360,6 @@ export type ListenerExternalTrigger = {
 
 export type ListenerScheduleTrigger = {
 	kind: "schedule";
-	everyMs?: number;
 	everySec?: number;
 	everyMin?: number;
 	everyHr?: number;
@@ -1815,20 +1813,18 @@ function normalizeListenerTriggers(
 		}
 
 		if (trigger.kind === "schedule") {
-			let everyMs = trigger.everyMs;
-			if (everyMs === undefined) {
-				if (trigger.everyDay !== undefined) everyMs = trigger.everyDay * 24 * 60 * 60 * 1000;
-				else if (trigger.everyHr !== undefined) everyMs = trigger.everyHr * 60 * 60 * 1000;
-				else if (trigger.everyMin !== undefined) everyMs = trigger.everyMin * 60 * 1000;
-				else if (trigger.everySec !== undefined) everyMs = trigger.everySec * 1000;
-			}
+			let everyMs: number | undefined = undefined;
+			if (trigger.everyDay !== undefined) everyMs = trigger.everyDay * 24 * 60 * 60 * 1000;
+			else if (trigger.everyHr !== undefined) everyMs = trigger.everyHr * 60 * 60 * 1000;
+			else if (trigger.everyMin !== undefined) everyMs = trigger.everyMin * 60 * 1000;
+			else if (trigger.everySec !== undefined) everyMs = trigger.everySec * 1000;
 
 			if (everyMs === undefined && trigger.at === undefined) {
-				throw new Error("schedule listener trigger requires an interval (everyMs, everyMin, etc.) or `at`");
+				throw new Error("schedule listener trigger requires an interval (everySec, everyMin, etc.) or `at`");
 			}
-			if (everyMs !== undefined && everyMs <= 0) {
+			if (everyMs !== undefined && everyMs < 1000) {
 				throw new Error(
-					"schedule listener trigger interval must be greater than 0",
+					"schedule listener trigger interval must be at least 1 second",
 				);
 			}
 
