@@ -26,7 +26,11 @@
     },
     "js": {
       "name": "matrix-bot-kit",
-      "version": "0.2.1-alpha-exp.0",
+      "version": "0.2.1-alpha-exp.1",
+      "bin": {
+        "mb": "./dist/cli.js",
+        "matrix-bot": "./dist/cli.js",
+      },
       "dependencies": {
         "@clack/prompts": "^1.5.1",
         "loglevel": "^1.9.2",
@@ -35,14 +39,15 @@
       "devDependencies": {
         "@napi-rs/cli": "^3.0.0",
         "@types/loglevel": "^1.5.4",
+        "ts-morph": "^28.0.0",
       },
       "optionalDependencies": {
-        "matrix-bot-kit-darwin-arm64": "0.2.0",
-        "matrix-bot-kit-darwin-x64": "0.2.0",
-        "matrix-bot-kit-linux-arm64-gnu": "0.2.0",
-        "matrix-bot-kit-linux-x64-gnu": "0.2.0",
-        "matrix-bot-kit-win32-arm64-msvc": "0.2.0",
-        "matrix-bot-kit-win32-x64-msvc": "0.2.0",
+        "matrix-bot-kit-darwin-arm64": "0.2.1-alpha-exp.1",
+        "matrix-bot-kit-darwin-x64": "0.2.1-alpha-exp.1",
+        "matrix-bot-kit-linux-arm64-gnu": "0.2.1-alpha-exp.1",
+        "matrix-bot-kit-linux-x64-gnu": "0.2.1-alpha-exp.1",
+        "matrix-bot-kit-win32-arm64-msvc": "0.2.1-alpha-exp.1",
+        "matrix-bot-kit-win32-x64-msvc": "0.2.1-alpha-exp.1",
       },
     },
   },
@@ -327,6 +332,8 @@
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.60.4", "", { "os": "win32", "cpu": "x64" }, "sha512-QVTUovf40zgTqlFVrKA1uXMVvU2QWEFWfAH8Wdc48IxLvrJMQVMBRjuQyUpzZCDkakImib9eVazbWlC6ksWtJw=="],
 
+    "@ts-morph/common": ["@ts-morph/common@0.29.0", "", { "dependencies": { "minimatch": "^10.0.1", "path-browserify": "^1.0.1", "tinyglobby": "^0.2.14" } }, "sha512-35oUmphHbJvQ/+UTwFNme/t2p3FoKiGJ5auTjjpNTop2dyREspirjMy82PLSC1pnDJ8ah1GU98hwpVt64YXQsg=="],
+
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.2", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg=="],
 
     "@types/bun": ["@types/bun@1.3.13", "", { "dependencies": { "bun-types": "1.3.13" } }, "sha512-9fqXWk5YIHGGnUau9TEi+qdlTYDAnOj+xLCmSTwXfAIqXr2x4tytJb43E9uCvt09zJURKXwAtkoH4nLQfzeTXw=="],
@@ -343,7 +350,11 @@
 
     "argparse": ["argparse@2.0.1", "", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
 
+    "balanced-match": ["balanced-match@4.0.4", "", {}, "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA=="],
+
     "before-after-hook": ["before-after-hook@4.0.0", "", {}, "sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ=="],
+
+    "brace-expansion": ["brace-expansion@5.0.6", "", { "dependencies": { "balanced-match": "^4.0.2" } }, "sha512-kLpxurY4Z4r9sgMsyG0Z9uzsBlgiU/EFKhj/h91/8yHu0edo7XuixOIH3VcJ8kkxs6/jPzoI6U9Vj3WqbMQ94g=="],
 
     "bun-types": ["bun-types@1.3.13", "", { "dependencies": { "@types/node": "*" } }, "sha512-QXKeHLlOLqQX9LgYaHJfzdBaV21T63HhFJnvuRCcjZiaUDpbs5ED1MgxbMra71CsryN/1dAoXuJJJwIv/2drVA=="],
 
@@ -358,6 +369,8 @@
     "cli-width": ["cli-width@4.1.0", "", {}, "sha512-ouuZd4/dm2Sw5Gmqy6bGyNNNe1qt9RpmxveLSO7KcgsTnU7RXfsw+/bukWGo1abgBiMAic068rclZsO4IWmmxQ=="],
 
     "clipanion": ["clipanion@4.0.0-rc.4", "", { "dependencies": { "typanion": "^3.8.0" } }, "sha512-CXkMQxU6s9GklO/1f714dkKBMu1lopS1WFF0B8o4AxPykR1hpozxSiUZ5ZUeBjfPgCWqbcNOtZVFhB8Lkfp1+Q=="],
+
+    "code-block-writer": ["code-block-writer@13.0.3", "", {}, "sha512-Oofo0pq3IKnsFtuHqSF7TqBfr71aeyZDVJ0HpmqB7FBM2qEigL0iPONSCZSO9pE9dZTAxANe5XHG9Uy0YMv8cg=="],
 
     "colorette": ["colorette@2.0.20", "", {}, "sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w=="],
 
@@ -409,17 +422,19 @@
 
     "matrix-bot-kit": ["matrix-bot-kit@workspace:js"],
 
-    "matrix-bot-kit-darwin-arm64": ["matrix-bot-kit-darwin-arm64@0.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-IS7ltHHdyt5Wxn5zioNiyQrcbXCrCwwhL246hAOwYQncVJBUdsfOI4svp+a1MqbVw2/Sa0x9jQNMR+Twl+5Lmg=="],
+    "matrix-bot-kit-darwin-arm64": ["matrix-bot-kit-darwin-arm64@0.2.1-alpha-exp.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-pgUgVzlfqnMrsUGCBExITdLpvp1RiEs2LHzxqj9OfOciCS9txUC8TKYeICqiK26XdZXZFfHHpdKGxQEqp+bkwA=="],
 
-    "matrix-bot-kit-darwin-x64": ["matrix-bot-kit-darwin-x64@0.2.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-LRW38K0BcRSh6a6UL08r5MesXIiJh45iazAEQj5u+h9cBvjro5p/oRj6Q5imyKUlG1dFLwU92FqIBRDuVVQ7oQ=="],
+    "matrix-bot-kit-darwin-x64": ["matrix-bot-kit-darwin-x64@0.2.1-alpha-exp.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-kVrFEOx8H/y1tKmObThjUGq4GBGUjOVybB7A95gvW8b3zsMWiLSSp/oQCK1Q6pURtyVoi9kujYpJna2nN/5/cQ=="],
 
-    "matrix-bot-kit-linux-arm64-gnu": ["matrix-bot-kit-linux-arm64-gnu@0.2.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-81Hj9EX5uQvvOcOJVjX+urZ9ztw244f+15pJEZnJJZNg1c+238mL297UfU/dtwaZb61c4si34w10wKuM3ORRcA=="],
+    "matrix-bot-kit-linux-arm64-gnu": ["matrix-bot-kit-linux-arm64-gnu@0.2.1-alpha-exp.1", "", { "os": "linux", "cpu": "arm64" }, "sha512-7fMtL5oGMV1h29xJb7sD0XwOXojfLvv0WQlDqEP55Af7KFUqKl6SddP2ED/Xk5sfBBq0vZF17nUBx29m0/SRTQ=="],
 
-    "matrix-bot-kit-linux-x64-gnu": ["matrix-bot-kit-linux-x64-gnu@0.2.0", "", { "os": "linux", "cpu": "x64" }, "sha512-eBotx7X/Zdg9lr/rhbaI305oQAG8I1fWLBSqp7phkEAiRGgy7NvCv9GfBjNwIuQdXbGWkwpZerhHa05FJH6WIQ=="],
+    "matrix-bot-kit-linux-x64-gnu": ["matrix-bot-kit-linux-x64-gnu@0.2.1-alpha-exp.1", "", { "os": "linux", "cpu": "x64" }, "sha512-NZP1Y0pKsqX8JTPI/x7NB1KUt+06RjwhJZdeyHH2jDUA/dA0C3xVzq4xuu4/zxqcwVf8K7Ri56tO7Dwj7cd1MA=="],
 
-    "matrix-bot-kit-win32-arm64-msvc": ["matrix-bot-kit-win32-arm64-msvc@0.2.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-+HHHjwjs1Ka9NG4LrTDd/GweKKjL86cXJT/eaAC37PTRxZUxhLLdY37npGtnpJCSczqK1i/igFxQ1txDoLqvEA=="],
+    "matrix-bot-kit-win32-arm64-msvc": ["matrix-bot-kit-win32-arm64-msvc@0.2.1-alpha-exp.1", "", { "os": "win32", "cpu": "arm64" }, "sha512-uOrBSuIumozgxr+/wOltDFnMRnIoefZdzbnugtrF/ABMvDS/aU225o5V3uvCXKCqtKVnq+TCc294PIW2nPpInQ=="],
 
-    "matrix-bot-kit-win32-x64-msvc": ["matrix-bot-kit-win32-x64-msvc@0.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-VvA4I8naryWWuc9cV3OQoh/Y2doXHiFR4B/fRy6gkUHTGSRnS/0TjMSP43kKdXyvyFFDUJdQPpqz8Fr8POrY1g=="],
+    "matrix-bot-kit-win32-x64-msvc": ["matrix-bot-kit-win32-x64-msvc@0.2.1-alpha-exp.1", "", { "os": "win32", "cpu": "x64" }, "sha512-sT/CtWCHlH5U9/jctieWpjUfvPkEhjDFzjIyLdODb+nT6+RkauK7MPaWFYLloiP2MoBrrzLypMrs37/efgtjug=="],
+
+    "minimatch": ["minimatch@10.2.5", "", { "dependencies": { "brace-expansion": "^5.0.5" } }, "sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg=="],
 
     "mlly": ["mlly@1.8.2", "", { "dependencies": { "acorn": "^8.16.0", "pathe": "^2.0.3", "pkg-types": "^1.3.1", "ufo": "^1.6.3" } }, "sha512-d+ObxMQFmbt10sretNDytwt85VrbkhhUA/JBGm1MPaWJ65Cl4wOgLaB1NYvJSZ0Ef03MMEU/0xpPMXUIQ29UfA=="],
 
@@ -432,6 +447,8 @@
     "object-assign": ["object-assign@4.1.1", "", {}, "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg=="],
 
     "obug": ["obug@2.1.1", "", {}, "sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ=="],
+
+    "path-browserify": ["path-browserify@1.0.1", "", {}, "sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g=="],
 
     "pathe": ["pathe@2.0.3", "", {}, "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w=="],
 
@@ -477,6 +494,8 @@
 
     "ts-interface-checker": ["ts-interface-checker@0.1.13", "", {}, "sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA=="],
 
+    "ts-morph": ["ts-morph@28.0.0", "", { "dependencies": { "@ts-morph/common": "~0.29.0", "code-block-writer": "^13.0.3" } }, "sha512-Wp3tnZ2bzwxyTZMtgWVzXDfm7lB1Drz+y9DmmYH/L702PQhPyVrp3pkou3yIz4qjS14GY9kcpmLiOOMvl8oG1g=="],
+
     "tslib": ["tslib@2.8.1", "", {}, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
     "tsup": ["tsup@8.5.1", "", { "dependencies": { "bundle-require": "^5.1.0", "cac": "^6.7.14", "chokidar": "^4.0.3", "consola": "^3.4.0", "debug": "^4.4.0", "esbuild": "^0.27.0", "fix-dts-default-cjs-exports": "^1.0.0", "joycon": "^3.1.1", "picocolors": "^1.1.1", "postcss-load-config": "^6.0.1", "resolve-from": "^5.0.0", "rollup": "^4.34.8", "source-map": "^0.7.6", "sucrase": "^3.35.0", "tinyexec": "^0.3.2", "tinyglobby": "^0.2.11", "tree-kill": "^1.2.2" }, "peerDependencies": { "@microsoft/api-extractor": "^7.36.0", "@swc/core": "^1", "postcss": "^8.4.12", "typescript": ">=4.5.0" }, "optionalPeers": ["@microsoft/api-extractor", "@swc/core", "postcss", "typescript"], "bin": { "tsup": "dist/cli-default.js", "tsup-node": "dist/cli-node.js" } }, "sha512-xtgkqwdhpKWr3tKPmCkvYmS9xnQK3m3XgxZHwSUjvfTjp7YfXe5tT3GgWi0F2N+ZSMsOeWeZFh7ZZFg5iPhing=="],
@@ -498,5 +517,17 @@
     "real-bot/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "real-bot/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
+
+    "real-bot/matrix-bot-kit/matrix-bot-kit-darwin-arm64": ["matrix-bot-kit-darwin-arm64@0.2.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-IS7ltHHdyt5Wxn5zioNiyQrcbXCrCwwhL246hAOwYQncVJBUdsfOI4svp+a1MqbVw2/Sa0x9jQNMR+Twl+5Lmg=="],
+
+    "real-bot/matrix-bot-kit/matrix-bot-kit-darwin-x64": ["matrix-bot-kit-darwin-x64@0.2.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-LRW38K0BcRSh6a6UL08r5MesXIiJh45iazAEQj5u+h9cBvjro5p/oRj6Q5imyKUlG1dFLwU92FqIBRDuVVQ7oQ=="],
+
+    "real-bot/matrix-bot-kit/matrix-bot-kit-linux-arm64-gnu": ["matrix-bot-kit-linux-arm64-gnu@0.2.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-81Hj9EX5uQvvOcOJVjX+urZ9ztw244f+15pJEZnJJZNg1c+238mL297UfU/dtwaZb61c4si34w10wKuM3ORRcA=="],
+
+    "real-bot/matrix-bot-kit/matrix-bot-kit-linux-x64-gnu": ["matrix-bot-kit-linux-x64-gnu@0.2.0", "", { "os": "linux", "cpu": "x64" }, "sha512-eBotx7X/Zdg9lr/rhbaI305oQAG8I1fWLBSqp7phkEAiRGgy7NvCv9GfBjNwIuQdXbGWkwpZerhHa05FJH6WIQ=="],
+
+    "real-bot/matrix-bot-kit/matrix-bot-kit-win32-arm64-msvc": ["matrix-bot-kit-win32-arm64-msvc@0.2.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-+HHHjwjs1Ka9NG4LrTDd/GweKKjL86cXJT/eaAC37PTRxZUxhLLdY37npGtnpJCSczqK1i/igFxQ1txDoLqvEA=="],
+
+    "real-bot/matrix-bot-kit/matrix-bot-kit-win32-x64-msvc": ["matrix-bot-kit-win32-x64-msvc@0.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-VvA4I8naryWWuc9cV3OQoh/Y2doXHiFR4B/fRy6gkUHTGSRnS/0TjMSP43kKdXyvyFFDUJdQPpqz8Fr8POrY1g=="],
   }
 }
