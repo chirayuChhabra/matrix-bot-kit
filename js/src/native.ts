@@ -92,7 +92,7 @@ export type NativeMediaMessage = {
 
 export type NativePollMessage = {
 	question: string;
-	kind: string;
+	kind: "disclosed" | "undisclosed";
 	maxSelections: number;
 	answers: NativePollAnswer[];
 };
@@ -111,7 +111,7 @@ export type NativeMediaAttachment = {
 export type NativePoll = {
 	question: string;
 	answers: NativePollAnswer[];
-	kind?: string;
+	kind?: "disclosed" | "undisclosed";
 	maxSelections?: number;
 };
 

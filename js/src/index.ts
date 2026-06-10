@@ -237,7 +237,7 @@ export type MediaDataAttachment = {
 
 export type PollMessage = {
 	question: string;
-	kind: string;
+	kind: "disclosed" | "undisclosed";
 	maxSelections: number;
 	answers: PollAnswer[];
 };
