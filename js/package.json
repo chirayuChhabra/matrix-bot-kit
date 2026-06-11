@@ -1,12 +1,12 @@
 {
   "name": "matrix-bot-kit",
-  "version": "0.3.0-alpha-exp.1",
+  "version": "0.3.1-alpha-exp.1",
   "description": "A modern SDK for creating Matrix bots",
   "author": "Chirayu Chhabra",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ChirayuChhabra/matrix-bot-sdk.git"
+    "url": "git+https://github.com/chirayuChhabra/matrix-bot-kit.git"
   },
   "keywords": [
     "matrix",

@@ -232,7 +232,7 @@ jobs:
 export function getReadme(botName: string): string {
 	return `# ${botName}
 
-A Matrix bot powered by [matrix-bot-kit](https://github.com/ChirayuChhabra/matrix-bot-sdk).
+A Matrix bot powered by [matrix-bot-kit](https://github.com/chirayuChhabra/matrix-bot-kit).
 
 ## Development
 This bot uses [Bun](https://bun.sh/) as its runtime.
