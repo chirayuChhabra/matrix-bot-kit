@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../js/src/index";
 
 // Helper to create mock contexts easily
-function createMockContext(overrides: Partial<Context> | Record<string, unknown> = {}): Context {
+function createMockContext(
+	overrides: Partial<Context> | Record<string, unknown> = {},
+): Context {
 	const body = overrides.body ?? "hello";
 	const msgOverrides = overrides.message ?? {};
 	return {
@@ -46,24 +48,27 @@ describe("MatrixBot Edge Cases", () => {
 	test("Initializes correctly and throws on missing required options", () => {
 		expect(
 			() =>
-				new MatrixBot({
-					homeserverUrl: "http://localhost",
-					username: "user",
-					password: "password",
-					// @ts-expect-error Missing admin and recoveryKey
-				}),
+				// @ts-expect-error Missing required options object
+				new MatrixBot(),
 		).toThrow();
 
 		expect(
 			() =>
 				new MatrixBot({
-					homeserverUrl: "http://localhost",
+					homeserverUrl: "",
 					username: "user",
 					password: "password",
-					recoveryKey: "key",
-					// @ts-expect-error Missing admin
 				}),
 		).toThrow();
+
+		// Minimal bot without admin or recoveryKey succeeds!
+		const bot = new MatrixBot({
+			homeserverUrl: "http://localhost",
+			username: "user",
+			password: "password",
+		});
+		expect(bot).toBeDefined();
+		expect(bot.admins).toEqual([]);
 	});
 
 	test("Handles duplicate command group registration by throwing", () => {
@@ -146,7 +151,7 @@ describe("MatrixBot Edge Cases", () => {
 
 		const hugeBody = "!large " + "A".repeat(50000);
 		await bot.dispatch(createMockContext({ body: hugeBody }));
-		
+
 		expect(executed).toBe(true);
 	});
 
@@ -166,7 +171,7 @@ describe("MatrixBot Edge Cases", () => {
 
 		await bot.dispatch(createMockContext({ body: "!pingy" }));
 		await bot.dispatch(createMockContext({ body: "!pin" }));
-		
+
 		expect(executed).toBe(false);
 	});
 });

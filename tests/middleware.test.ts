@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { type Context, MatrixBot } from "../js/src/index";
 
-function createMockContext(overrides: Partial<Context> | Record<string, unknown> = {}): Context {
+function createMockContext(
+	overrides: Partial<Context> | Record<string, unknown> = {},
+): Context {
 	const body = overrides.body ?? "hello";
 	const msgOverrides = overrides.message ?? {};
 	return {
@@ -67,14 +69,14 @@ describe("MatrixBot Middleware Resilience", () => {
 			},
 			async () => {
 				handlerHit = true;
-			}
+			},
 		);
 
 		await bot.dispatch(createMockContext({ body: "!stop" }));
-		
+
 		expect(middleware1Hit).toBe(true);
 		expect(middleware2Hit).toBe(false); // Should never be reached
-		expect(handlerHit).toBe(false);     // Should never be reached
+		expect(handlerHit).toBe(false); // Should never be reached
 	});
 
 	test("Shares and mutates session context safely across middlewares", async () => {
@@ -101,7 +103,7 @@ describe("MatrixBot Middleware Resilience", () => {
 			},
 			async (ctx) => {
 				finalValue = ctx.session.value;
-			}
+			},
 		);
 
 		await bot.dispatch(createMockContext({ body: "!mutate" }));
@@ -130,7 +132,7 @@ describe("MatrixBot Middleware Resilience", () => {
 			},
 			async () => {
 				handlerHit = true;
-			}
+			},
 		);
 
 		await bot.dispatch(createMockContext({ body: "!throw" }));
