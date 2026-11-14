@@ -3,8 +3,7 @@
 	"private": true,
 	"type": "module",
 	"workspaces": [
-		"js",
-		"bot-testing"
+		"js"
 	],
 	"scripts": {
 		"test": "bun test js/tests tests",

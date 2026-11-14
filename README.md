@@ -10,13 +10,11 @@
 
 ---
 
-The Matrix Bot Kit provides a high-level TypeScript API for bot logic, backed by a Rust runtime that handles Matrix syncing, End-to-End Encryption (E2EE), state resolution, and connection pooling.
+The Matrix Bot Kit provides a clean, modern, developer-friendly TypeScript API for bot logic, backed by a high-performance native Rust runtime.
 
 ---
 
 ## Installation
-
-Install using your preferred package manager:
 
 ```bash
 npm install matrix-bot-kit
@@ -28,26 +26,70 @@ yarn add matrix-bot-kit
 
 ---
 
+## Quick Start
+
+```ts
+import { MatrixBot } from "matrix-bot-kit";
+
+const bot = new MatrixBot({
+  homeserverUrl: "https://matrix.org",
+  username: process.env.BOT_USERNAME!,
+  password: process.env.BOT_PASSWORD!,
+});
+
+// Simple command
+bot.command("!echo", async (ctx) => {
+  await ctx.reply.text(ctx.args);
+});
+
+// Group commands with middleware and default handler
+const weather = bot.group("!weather", { description: "Weather info" });
+weather.command("today", async (ctx) => {
+  await ctx.reply.text(`Weather for ${ctx.args || "your city"}: ☀️ 22°C`);
+});
+weather.default(async (ctx) => {
+  await ctx.reply.text("Usage: !weather today <city>");
+});
+
+// Interactive prompt
+bot.command("!ask", async (ctx) => {
+  const answer = await ctx.prompt.text("What is your favorite color?");
+  if (answer.status === "answered") {
+    await ctx.reply.text(`Nice! ${answer.text} is a great color.`);
+  }
+});
+
+// Background schedule
+bot.schedule("daily-sync", { every: { hours: 24 } }, async () => {
+  await bot.room("!general:matrix.org").send.text("Daily check-in!");
+});
+
+await bot.start();
+console.log("Bot running!");
+```
+
+---
+
 ## Features
 
+- **Developer Experience (DX) First:** Zero mandatory boilerplate. Start a bot in 5 lines of code.
 - **Hybrid Architecture:** Rust handles syncing and crypto; TypeScript handles business logic.
-- **Native E2EE:** Out-of-the-box support for end-to-end encryption and recovery keys.
-- **Routing System:** Support for commands, nested command groups, and middleware.
-- **Interactive Prompts:** Pause execution to wait for user input (`ctx.prompt`).
-- **Session State:** Built-in memory store for multi-step conversations (`ctx.session`).
-- **Event Listeners:** Schedule cron-like tasks, handle incoming webhooks, or process raw matrix events.
-- **Rich Media & Polls:** Native helpers for sending/receiving images, files, videos, and interactive polls — with full control over poll settings (disclosed/undisclosed, max selections) and lifecycle (vote tracking, closing polls).
-- **Reactions & Moderation:** APIs to react to messages or redact them.
-- **Utility Commands:** Built-in maintainer toolkit (`!uptime`, `!status`, `!maintenance`, `!help`).
+- **Native E2EE:** Out-of-the-box support for end-to-end encryption.
+- **Clean Routing:** Support for commands, nested command groups, middleware, and fallbacks.
+- **Interactive Prompts:** Race-free prompt flow with typed outcomes (`ctx.prompt.text`).
+- **Session State:** Built-in store for multi-step conversations (`ctx.session`).
+- **Direct Room Sends:** Send text, markdown, polls, and media directly from anywhere (`bot.room(id).send.text`).
+- **Rich Media & Polls:** Native helpers for media attachments and polls with `.close()`.
+- **Reactions & Moderation:** APIs to react to messages or redact them directly on `SentMessage`.
+- **Isolated Background Jobs:** Named interval and one-shot schedules with overlap control.
 
 ---
 
 ## Documentation
 
-For full documentation and advanced usage, please refer to our detailed documentation folder:
-
 - [Getting Started](./docs/getting-started.md)
 - [Architecture](./docs/architecture.md)
+- [API Reference](./docs/api-reference.md)
 - **Core Concepts**
   - [Commands & Routing](./docs/core-concepts/commands-routing.md)
   - [Listeners (Event-driven)](./docs/core-concepts/listeners.md)
@@ -55,9 +97,3 @@ For full documentation and advanced usage, please refer to our detailed document
   - [Sessions & Prompts](./docs/core-concepts/sessions-prompts.md)
   - [Reactions & Redactions](./docs/core-concepts/reactions-redactions.md)
   - [Media & Polls](./docs/core-concepts/media-polls.md)
-- **Advanced Features**
-  - [Built-in Utility Commands](./docs/advanced/utility-commands.md)
-  - [Self-Documentation](./docs/advanced/self-documentation.md)
-- [API Reference](./docs/api-reference.md)
-- [Logging & Error Handling](./docs/logging-error-handling.md)
-

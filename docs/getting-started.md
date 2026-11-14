@@ -1,59 +1,82 @@
 # Getting Started
 
-## Prerequisites
-
-Ensure you have the following installed:
-- [Bun](https://bun.sh/)
-- [Rust & Cargo](https://rustup.rs/) (to compile the native backend)
-
 ## Installation
 
 Install `matrix-bot-kit` using your preferred package manager:
 
 ```bash
-bun add matrix-bot-kit
-# or
 npm install matrix-bot-kit
+# or
+bun add matrix-bot-kit
 # or
 yarn add matrix-bot-kit
 ```
 
-### Building from Source
+## Your First Bot (5 lines of code!)
 
-If you want to contribute or build from source:
-
-1. Clone the project repository.
-2. Build the native binding:
-   ```bash
-   devbox run build-native
-   # Or manually compile crates and place the .node file at:
-   # js/native/matrix_bot_node.node
-   ```
-
-## Your First Bot
+Building a bot with `matrix-bot-kit` is now simpler than ever. No mandatory encryption keys or admin lists required to get started.
 
 ```ts
-import { MatrixBot, type Context } from "matrix-bot-kit"
+import { MatrixBot } from "matrix-bot-kit";
 
 const bot = new MatrixBot({
   homeserverUrl: "https://matrix.org",
-  username: Bun.env.BOT_USERNAME!,
-  password: Bun.env.BOT_PASSWORD!,
-  recoveryKey: Bun.env.RECOVERY_KEY!,
-  admin: [Bun.env.MAINTAINER_ID!],
-  timelineLimit: 20,
-  config: {
-    announceCommandGroupUsage: true,
-    utility: true, 
-  },
-})
+  username: process.env.BOT_USERNAME!,
+  password: process.env.BOT_PASSWORD!,
+});
 
 // Simple echo command
-bot.command("!echo", async (ctx: Context) => {
-  await ctx.reply.text(ctx.message.body)
-})
+bot.command("!echo", async (ctx) => {
+  await ctx.reply.text(ctx.args);
+});
 
-await bot.start(() => {
-  console.log("Bot successfully started and syncing")
-})
+await bot.start();
+console.log("Bot is running!");
+```
+
+## Commands, Aliases & Groups
+
+```ts
+// Multiple aliases
+bot.command(["!echo", "!say"], { description: "Repeat your message" }, async (ctx) => {
+  await ctx.reply.text(ctx.args);
+});
+
+// Command Groups with Group Middleware and Default Fallback
+const admin = bot.group("!admin", { access: "admin" });
+
+admin.use(async (ctx, next) => {
+  console.log(`[Admin audit] ${ctx.sender.id} accessed ${ctx.message.body}`);
+  await next();
+});
+
+admin.command("status", async (ctx) => {
+  await ctx.reply.text("All systems operational! 🚀");
+});
+
+admin.default(async (ctx) => {
+  await ctx.reply.text("Unknown admin command. Available: !admin status");
+});
+```
+
+## Interactive Prompts
+
+Wait for user replies easily with non-blocking, typed prompt flows:
+
+```ts
+bot.command("!askname", async (ctx) => {
+  const result = await ctx.prompt.text("What is your name?");
+  if (result.status === "answered") {
+    await ctx.reply.text(`Hello, ${result.text}!`);
+  }
+});
+```
+
+## Background Schedules & Room Sends
+
+```ts
+// Send scheduled notifications directly to rooms
+bot.schedule("daily-report", { every: { hours: 24 } }, async (job) => {
+  await bot.room("!general:matrix.org").send.text("Daily reminder!");
+});
 ```
